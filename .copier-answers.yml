@@ -1,0 +1,14 @@
+# Changes here will be overwritten by Copier
+_commit: afe4564
+_src_path: .
+copyright_year: '2024'
+documentation: true
+email: me@cuinixam.com
+full_name: cuinixam
+github_username: cuinixam
+open_source_license: MIT
+package_name: clanguru
+project_name: clanguru
+project_short_description: C language utils and tools based on the clang module.
+project_slug: clanguru
+
