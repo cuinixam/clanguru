@@ -27,9 +27,9 @@ bootstrap_json_path = Path(__file__).parent / "bootstrap.json"
 if bootstrap_json_path.exists():
     with bootstrap_json_path.open("r") as f:
         config = json.load(f)
-    package_manager = config.get("python_package_manager", "poetry>=1.7.1")
+    package_manager = config.get("python_package_manager", "poetry>=1.8.2")
 else:
-    package_manager = "poetry>=1.7.1"
+    package_manager = "poetry>=1.8.2"
 
 
 @dataclass

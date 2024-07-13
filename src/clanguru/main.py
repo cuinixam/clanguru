@@ -1,16 +1,19 @@
 import sys
 from pathlib import Path
+from typing import Optional
 
 import typer
 from py_app_dev.core.exceptions import UserNotificationException
 from py_app_dev.core.logging import logger, setup_logger, time_it
 
 from clanguru import __version__
-from clanguru.my_app import MyApp
+from clanguru.compilation_options_manager import CompilationOptionsManager
+from clanguru.cparser import CLangParser
+from clanguru.doc_generator import MarkdownFormatter, generate_documentation
 
 package_name = "clanguru"
 
-app = typer.Typer(name=package_name, help="C language utils and tools based on the clang module.", no_args_is_help=True)
+app = typer.Typer(name=package_name, help="C language utils and tools based on the libclang module.", no_args_is_help=True, add_completion=False)
 
 
 @app.callback(invoke_without_command=True)
@@ -23,15 +26,31 @@ def version(
 
 
 @app.command()
-@time_it("init")
-def init(project_dir: Path = typer.Option(Path.cwd().absolute(), help="The project directory"), enable: bool = False) -> None:  # noqa: B008
-    logger.info(f"Initializing project in {project_dir} with enable={enable}")
+@time_it("generate")
+def generate(
+    source_file: Path = typer.Option(help="Input source file"),  # noqa: B008
+    output_file: Path = typer.Option(help="Output file"),  # noqa: B008
+    compilation_database: Optional[Path] = typer.Option(None, help="Compilation database file required if the source file includes external headers."),  # noqa: B008
+) -> None:
+    parser = CLangParser()
+    translation_unit = parser.load(source_file, CompilationOptionsManager(compilation_database))
+    generate_documentation(translation_unit, MarkdownFormatter(), output_file)
 
 
 @app.command()
-@time_it("run")
-def run(project_dir: Path = typer.Option(Path.cwd().absolute(), help="The project directory")) -> None:  # noqa: B008
-    MyApp(project_dir).run()
+@time_it("parse")
+def parse(
+    source_file: Path = typer.Option(help="Input source file"),  # noqa: B008
+    output_file: Optional[Path] = typer.Option(None, help="Output file"),  # noqa: B008
+    compilation_database: Optional[Path] = typer.Option(None, help="Compilation database file required if the source file includes external headers."),  # noqa: B008
+) -> None:
+    parser = CLangParser()
+    translation_unit = parser.load(source_file, CompilationOptionsManager(compilation_database))
+    if output_file:
+        with open(output_file, "w") as f:
+            f.write(str(translation_unit))
+    else:
+        logger.info(translation_unit)
 
 
 def main() -> int:

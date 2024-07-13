@@ -80,12 +80,13 @@ extensions.append("sphinx_copybutton")
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "sphinx_book_theme"
-html_logo = "_static/python-logo-only.svg"
+html_logo = "_static/clanguru-logo.png"
+html_favicon = "_static/clanguru-logo.png"
 html_theme_options = {
     "home_page_in_toc": True,
-    "github_url": "https://github.com/cuinixam/hello-python",
-    "repository_url": "https://github.com/cuinixam/hello-python",
-    "repository_branch": "master",
+    "github_url": "https://github.com/cuinixam/clanguru",
+    "repository_url": "https://github.com/cuinixam/clanguru",
+    "repository_branch": "main",
     "path_to_docs": "docs",
     "use_repository_button": True,
     "use_edit_page_button": True,

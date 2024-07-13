@@ -24,7 +24,11 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-py-app-dev = "^2.1.0"
+py-app-dev = "^2.1"
+libclang = "^18.1"
+typer = {extras = ["all"], version = "^0.12.3"}
+mashumaro = "^3.13"
+
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
@@ -67,7 +71,7 @@ match = "(?!main$)"
 prerelease = true
 
 [tool.pytest.ini_options]
-addopts = "-v -Wdefault --cov=clanguru --cov-report=term-missing:skip-covered"
+addopts = "-vv -Wdefault --cov=clanguru --cov-report=term-missing:skip-covered -s"
 pythonpath = ["src"]
 
 [tool.coverage.run]
@@ -98,7 +102,6 @@ lint.ignore = [
 ]
 lint.select = [
     "B",   # flake8-bugbear
-    "D",   # flake8-docstrings
     "C4",  # flake8-comprehensions
     "S",   # flake8-bandit
     "F",   # pyflake

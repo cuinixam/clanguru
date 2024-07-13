@@ -1,3 +1,0 @@
-# Basic Concepts and Naming Conventions
-
-To be documented ...

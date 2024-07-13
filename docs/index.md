@@ -1,29 +1,16 @@
 ---
-title: clanguru
+sd_hide_title: true
 ---
 
-::::{grid}
-:reverse:
-:gutter: 2 1 1 1
-:margin: 4 4 1 1
+# 🔎 Overview
 
-:::{grid-item}
-:columns: 4
+:::{card} Clanguru
 
-```{image} ./_static/python-logo-only.svg
-:width: 150px
+```{include} intro.md
+
 ```
+
 :::
-
-:::{grid-item}
-:columns: 8
-:class: sd-fs-3
-
-C language utils and tools based on the clang module.
-:::
-
-::::
-
 
 ---
 
@@ -34,14 +21,6 @@ C language utils and tools based on the clang module.
 getting_started/index.md
 features/index.md
 internals/index.md
-```
-
-
-```{toctree}
-:hidden:
-:caption: 📄 About
-
-about/_readme.md
-about/_changelog.md
+about/index.md
 
 ```
