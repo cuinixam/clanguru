@@ -26,7 +26,7 @@ packages = [
 python = "^3.10"
 py-app-dev = "^2.1"
 libclang = "^18.1"
-typer = {extras = ["all"], version = "^0.12.3"}
+typer = "^0.12.3"
 mashumaro = "^3.13"
 
 
@@ -110,9 +110,6 @@ lint.select = [
     "UP",  # pyupgrade
     "I",   # isort
     "RUF", # ruff specific
-]
-exclude = [
-    "bootstrap.py"
 ]
 
 [tool.ruff.lint.per-file-ignores]

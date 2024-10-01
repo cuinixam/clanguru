@@ -41,10 +41,10 @@ Install this via pip (or your favourite package manager):
 ## Start developing
 
 The project uses Poetry for dependencies management and packaging.
-Run the `bootstrap.ps1` script to install Python and create the virtual environment.
+Run the `build.ps1` script to install Python and create the virtual environment.
 
 ```powershell
-.\bootstrap.ps1
+.\build.ps1 -install
 ```
 
 This will also generate a `poetry.lock` file, you should track this file in version control.
