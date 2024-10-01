@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional, Type, TypeVar
 
-from clang.cindex import Cursor, Index, SourceRange
+from clang.cindex import Cursor, CursorKind, Index, SourceRange
 from clang.cindex import Token as _Token
 from clang.cindex import TranslationUnit as _TranslationUnit
 
@@ -111,6 +111,70 @@ class CppClass(Declaration):
     pass
 
 
+class Variable(Declaration):
+    def get_init_value(self) -> Optional[str]:
+        """Get the initialization value for the variable."""
+        var_cursor = self.origin.raw_node
+
+        # The initializer is usually represented as a child cursor
+        for child in var_cursor.get_children():
+            if child.kind.is_expression() or child.kind == CursorKind.INIT_LIST_EXPR:
+                # Extract the initializer value from the child cursor
+                init_value = self._extract_init_value(child)
+                return init_value
+
+        # If no initializer is found
+        return None
+
+    def _extract_init_value(self, expr_cursor: Cursor) -> Optional[str]:
+        """Recursively extract the initialization value from an expression cursor."""
+        kind = expr_cursor.kind
+
+        if kind in (
+            CursorKind.INTEGER_LITERAL,
+            CursorKind.FLOATING_LITERAL,
+            CursorKind.STRING_LITERAL,
+            CursorKind.CHARACTER_LITERAL,
+        ):
+            tokens = list(expr_cursor.get_tokens())
+            return tokens[0].spelling if tokens else None
+
+        elif kind in (
+            CursorKind.UNARY_OPERATOR,
+            CursorKind.BINARY_OPERATOR,
+            CursorKind.COMPOUND_ASSIGNMENT_OPERATOR,
+            CursorKind.CALL_EXPR,
+            CursorKind.DECL_REF_EXPR,
+            CursorKind.MEMBER_REF_EXPR,
+            CursorKind.ARRAY_SUBSCRIPT_EXPR,
+            CursorKind.CXX_BOOL_LITERAL_EXPR,
+            CursorKind.CXX_NULL_PTR_LITERAL_EXPR,
+            CursorKind.CXX_STATIC_CAST_EXPR,
+            CursorKind.CXX_REINTERPRET_CAST_EXPR,
+            CursorKind.CXX_CONST_CAST_EXPR,
+            CursorKind.CXX_FUNCTIONAL_CAST_EXPR,
+            CursorKind.PAREN_EXPR,
+            CursorKind.INIT_LIST_EXPR,
+        ):
+            # For complex expressions, collect tokens recursively
+            tokens = []
+            for token in expr_cursor.get_tokens():
+                tokens.append(token.spelling)
+            value = "".join(tokens)
+            return value
+        else:
+            # For other expressions, attempt to collect tokens
+            tokens = []
+            for child in expr_cursor.get_children():
+                child_value = self._extract_init_value(child)
+                if child_value is not None:
+                    tokens.append(child_value)
+            if tokens:
+                return "".join(tokens)
+            else:
+                return None
+
+
 class CLangParser:
     def __init__(self) -> None:
         self.index = Index.create()
@@ -169,6 +233,10 @@ class CLangParser:
     @staticmethod
     def get_functions(tu: TranslationUnit) -> List[Function]:
         return CLangParser._get_declarations(tu, "FUNCTION_DECL", Function)
+
+    @staticmethod
+    def get_variables(tu: TranslationUnit) -> List[Variable]:
+        return CLangParser._get_declarations(tu, "VAR_DECL", Variable)
 
     @staticmethod
     def get_classes(tu: TranslationUnit) -> List[CppClass]:

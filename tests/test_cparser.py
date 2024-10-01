@@ -94,8 +94,7 @@ def test_parsing_function(tmp_path: Path) -> None:
         int test_function() {
             int x = 5;
             return x * 2;
-        }
-    """)
+        }""")
     )
     functions = CLangParser.get_functions(CLangParser().load(file))
     assert len(functions) == 1
@@ -103,8 +102,7 @@ def test_parsing_function(tmp_path: Path) -> None:
         int test_function() {
             int x = 5;
             return x * 2;
-        }
-        """)
+        }""")
 
     assert functions[0].body == expected_body
 
@@ -225,3 +223,43 @@ def test_cparser_cpp_with_macros(cpp_test_file: Path) -> None:
     assert classes[0].name == "my_comp_my_test_Test"
     assert classes[0].description_token is not None
     assert classes[0].description == "Description for my_test class"
+
+
+def test_parsing_variables(tmp_path: Path) -> None:
+    file = tmp_path / "variable.c"
+    file.write_text(
+        dedent("""
+        #define SWITCH 1
+        #ifdef SWITCH
+            #define INIT_VALUE 666
+        #else
+            #define INIT_VALUE 0
+        #endif
+        int my_var1 = INIT_VALUE;
+        int my_var2 = 13;
+        int my_var3 = my_var1;
+    """)
+    )
+    variables = CLangParser.get_variables(CLangParser().load(file))
+    assert len(variables) == 3
+    assert variables[0].get_init_value() == "666"
+    assert variables[1].get_init_value() == "13"
+    assert variables[2].get_init_value() == "my_var1"
+
+    file.write_text(
+        dedent("""
+        #ifdef SWITCH
+            #define INIT_VALUE 666
+        #else
+            #define INIT_VALUE 0
+        #endif
+        int my_var1 = INIT_VALUE;
+        int my_var2 = 13;
+        int my_var3 = my_var1;
+    """)
+    )
+    variables = CLangParser.get_variables(CLangParser().load(file))
+    assert len(variables) == 3
+    assert variables[0].get_init_value() == "0"
+    assert variables[1].get_init_value() == "13"
+    assert variables[2].get_init_value() == "my_var1"

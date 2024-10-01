@@ -38,11 +38,9 @@ jobs:
         python-version:
           - "3.10"
           - "3.11"
-          - "3.12"
         os:
           - ubuntu-latest
           - windows-latest
-          - macOS-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -57,10 +55,11 @@ jobs:
       - name: Test with Pytest
         run: poetry run pytest --cov-report=xml
         shell: bash
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: cuinixam/clanguru
 
   release:
     needs:
@@ -81,16 +80,16 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
 
-      # Do a dry run of PSR
+        # Do a dry run of release
       - name: Test release
-        uses: python-semantic-release/python-semantic-release@v9.0.3
+        uses: python-semantic-release/python-semantic-release@v9.1.1
         if: github.ref_name != 'main'
         with:
           root_options: --noop
 
-      # On main branch: actual PSR + upload to PyPI & GitHub
+        # On main branch: actual release + upload to PyPI & GitHub
       - name: Release
-        uses: python-semantic-release/python-semantic-release@v9.0.3
+        uses: python-semantic-release/python-semantic-release@v9.1.1
         id: release
         if: github.ref_name == 'main'
         with:

@@ -52,7 +52,7 @@ version_variables = [
     "src/clanguru/__init__.py:__version__",
     "docs/conf.py:release",
 ]
-build_command = "poetry build"
+build_command = "pip install poetry && poetry build"
 
 [tool.semantic_release.changelog]
 exclude_commit_patterns = [
