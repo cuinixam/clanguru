@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "clanguru"
-version = "0.0.0"
+version = "0.1.0"
 description = "C language utils and tools based on the clang module."
 authors = ["cuinixam <me@cuinixam.com>"]
 license = "MIT"
