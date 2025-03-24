@@ -5,7 +5,7 @@ To use Clanguru, follow these steps:
 Install Clanguru (assuming it's available via pip):
 
 ```
-pip install clanguru
+pipx install clanguru
 ```
 
 To see available commands and options, use:

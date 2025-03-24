@@ -2,42 +2,12 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "install dependencies",
-      "command": ".venv/bin/poetry install --with=dev --with=docs",
-      "windows": {
-        "command": ".venv/Scripts/poetry install --with=dev --with=docs"
-      },
-      "type": "shell",
-      "presentation": {
-        "reveal": "always"
-      },
-      "group": {
-        "kind": "build",
-        "isDefault": false
-      }
-    },
-    {
       "label": "run tests",
-      "command": ".venv/bin/poetry run pytest --cov",
+      "command": ".venv/bin/pypeline run --step PyTest --single",
       "windows": {
-        "command": ".venv/Scripts/poetry run pytest --cov"
+        "command": ".venv/Scripts/pypeline run --step PyTest --single"
       },
       "type": "shell",
-      "presentation": {
-        "reveal": "always"
-      },
-      "group": {
-        "kind": "build",
-        "isDefault": false
-      }
-    },
-    {
-      "label": "run tests in file",
-      "type": "shell",
-      "command": ".venv/bin/poetry run pytest --cov ${file}",
-      "windows": {
-        "command": ".venv/Scripts/poetry run pytest --cov ${file}"
-      },
       "presentation": {
         "reveal": "always"
       },
@@ -48,9 +18,9 @@
     },
     {
       "label": "generate docs",
-      "command": ".venv/bin/poetry run sphinx-build -E -a ${workspaceFolder}/docs ${workspaceFolder}/docs/_build",
+      "command": ".venv/bin/pypeline run --step Docs --single",
       "windows": {
-        "command": ".venv/Scripts/poetry run sphinx-build -E -a ${workspaceFolder}/docs ${workspaceFolder}/docs/_build"
+        "command": ".venv/Scripts/pypeline run --step Docs --single"
       },
       "type": "shell",
       "presentation": {
@@ -75,9 +45,9 @@
     },
     {
       "label": "run pre-commit checks",
-      "command": ".venv/bin/poetry run pre-commit run --all-files",
+      "command": ".venv/bin/pypeline run --step PreCommit --single",
       "windows": {
-        "command": ".venv/Scripts/poetry run pre-commit run --all-files"
+        "command": ".venv/Scripts/pypeline run --step PreCommit --single"
       },
       "type": "shell",
       "presentation": {

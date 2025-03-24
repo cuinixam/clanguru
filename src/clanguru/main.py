@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 from py_app_dev.core.exceptions import UserNotificationException
@@ -30,7 +29,7 @@ def version(
 def generate(
     source_file: Path = typer.Option(help="Input source file"),  # noqa: B008
     output_file: Path = typer.Option(help="Output file"),  # noqa: B008
-    compilation_database: Optional[Path] = typer.Option(None, help="Compilation database file required if the source file includes external headers."),  # noqa: B008
+    compilation_database: Path | None = typer.Option(None, help="Compilation database file required if the source file includes external headers."),  # noqa: B008
 ) -> None:
     parser = CLangParser()
     translation_unit = parser.load(source_file, CompilationOptionsManager(compilation_database))
@@ -41,8 +40,8 @@ def generate(
 @time_it("parse")
 def parse(
     source_file: Path = typer.Option(help="Input source file"),  # noqa: B008
-    output_file: Optional[Path] = typer.Option(None, help="Output file"),  # noqa: B008
-    compilation_database: Optional[Path] = typer.Option(None, help="Compilation database file required if the source file includes external headers."),  # noqa: B008
+    output_file: Path | None = typer.Option(None, help="Output file"),  # noqa: B008
+    compilation_database: Path | None = typer.Option(None, help="Compilation database file required if the source file includes external headers."),  # noqa: B008
 ) -> None:
     parser = CLangParser()
     translation_unit = parser.load(source_file, CompilationOptionsManager(compilation_database))

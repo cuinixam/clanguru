@@ -3,7 +3,7 @@ import json
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, List, Optional
+from typing import ClassVar
 
 from mashumaro import DataClassDictMixin
 from mashumaro.config import TO_DICT_ADD_OMIT_NONE_FLAG, BaseConfig
@@ -25,11 +25,11 @@ class PathField(SerializableType):
 class CompileCommand(DataClassDictMixin):
     directory: Path
     file: Path
-    arguments: List[str] = field(default_factory=list)
-    command: Optional[str] = None
-    output: Optional[Path] = None
+    arguments: list[str] = field(default_factory=list)
+    command: str | None = None
+    output: Path | None = None
 
-    def get_compile_options(self) -> List[str]:
+    def get_compile_options(self) -> list[str]:
         options = []
         if self.arguments:
             options = self.arguments
@@ -40,7 +40,7 @@ class CompileCommand(DataClassDictMixin):
     def get_file_path(self) -> Path:
         return self.file if self.file.is_absolute() else self.directory / self.file
 
-    def clean_up_arguments(self, arguments: List[str]) -> List[str]:
+    def clean_up_arguments(self, arguments: list[str]) -> list[str]:
         """
         Clean up the command line to only get the compilation options.
 
@@ -80,13 +80,13 @@ class CompileCommand(DataClassDictMixin):
 
 @dataclass
 class CompilationDatabase(DataClassJSONMixin):
-    commands: List[CompileCommand]
+    commands: list[CompileCommand]
 
-    def getCompileCommands(self, file: Path) -> List[CompileCommand]:
+    def getCompileCommands(self, file: Path) -> list[CompileCommand]:
         return [command for command in self.commands if command.get_file_path() == file]
 
     class Config(BaseConfig):
-        code_generation_options: ClassVar[List[str]] = [TO_DICT_ADD_OMIT_NONE_FLAG]
+        code_generation_options: ClassVar[list[str]] = [TO_DICT_ADD_OMIT_NONE_FLAG]
 
     @classmethod
     def from_json_file(cls, file_path: Path) -> "CompilationDatabase":
@@ -106,18 +106,18 @@ class CompilationDatabase(DataClassJSONMixin):
 
 
 class CompilationOptionsManager:
-    def __init__(self, compilation_database: Optional[Path] = None, no_default: bool = False):
-        self.compilation_database: Optional[CompilationDatabase] = CompilationDatabase.from_json_file(compilation_database) if compilation_database else None
+    def __init__(self, compilation_database: Path | None = None, no_default: bool = False):
+        self.compilation_database: CompilationDatabase | None = CompilationDatabase.from_json_file(compilation_database) if compilation_database else None
         self.no_default = no_default
         self.default_options = ["-std=c11"]
 
-    def get_compile_options(self, file: Path) -> List[str]:
+    def get_compile_options(self, file: Path) -> list[str]:
         if self.compilation_database:
-            commands: List[CompileCommand] = self.compilation_database.getCompileCommands(file)
+            commands: list[CompileCommand] = self.compilation_database.getCompileCommands(file)
             # TODO: how to handle multiple commands for the same file?
             if commands:
                 return commands[0].get_compile_options()
         return [] if self.no_default else self.default_options
 
-    def set_default_options(self, options: List[str]) -> None:
+    def set_default_options(self, options: list[str]) -> None:
         self.default_options = options
