@@ -12,8 +12,8 @@
   </a>
 </p>
 <p align="center">
-  <a href="https://python-poetry.org/">
-    <img src="https://img.shields.io/badge/packaging-poetry-299bd7?style=flat-square&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAASCAYAAABrXO8xAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAJJSURBVHgBfZLPa1NBEMe/s7tNXoxW1KJQKaUHkXhQvHgW6UHQQ09CBS/6V3hKc/AP8CqCrUcpmop3Cx48eDB4yEECjVQrlZb80CRN8t6OM/teagVxYZi38+Yz853dJbzoMV3MM8cJUcLMSUKIE8AzQ2PieZzFxEJOHMOgMQQ+dUgSAckNXhapU/NMhDSWLs1B24A8sO1xrN4NECkcAC9ASkiIJc6k5TRiUDPhnyMMdhKc+Zx19l6SgyeW76BEONY9exVQMzKExGKwwPsCzza7KGSSWRWEQhyEaDXp6ZHEr416ygbiKYOd7TEWvvcQIeusHYMJGhTwF9y7sGnSwaWyFAiyoxzqW0PM/RjghPxF2pWReAowTEXnDh0xgcLs8l2YQmOrj3N7ByiqEoH0cARs4u78WgAVkoEDIDoOi3AkcLOHU60RIg5wC4ZuTC7FaHKQm8Hq1fQuSOBvX/sodmNJSB5geaF5CPIkUeecdMxieoRO5jz9bheL6/tXjrwCyX/UYBUcjCaWHljx1xiX6z9xEjkYAzbGVnB8pvLmyXm9ep+W8CmsSHQQY77Zx1zboxAV0w7ybMhQmfqdmmw3nEp1I0Z+FGO6M8LZdoyZnuzzBdjISicKRnpxzI9fPb+0oYXsNdyi+d3h9bm9MWYHFtPeIZfLwzmFDKy1ai3p+PDls1Llz4yyFpferxjnyjJDSEy9CaCx5m2cJPerq6Xm34eTrZt3PqxYO1XOwDYZrFlH1fWnpU38Y9HRze3lj0vOujZcXKuuXm3jP+s3KbZVra7y2EAAAAAASUVORK5CYII=" alt="Poetry">
+  <a href="https://github.com/astral-sh/uv">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv">
   </a>
   <a href="https://github.com/astral-sh/ruff">
     <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="ruff">
@@ -30,39 +30,27 @@
   <img src="https://img.shields.io/pypi/l/clanguru.svg?style=flat-square" alt="License">
 </p>
 
-C language utils and tools based on the clang module.
-
-## Installation
-
-Install this via pip (or your favourite package manager):
-
-`pip install clanguru`
+C language utils and tools based on the clang and binutils modules.
 
 ## Start developing
 
-The project uses Poetry for dependencies management and packaging.
-Run the `build.ps1` script to install Python and create the virtual environment.
-
-```powershell
-.\build.ps1 -install
-```
-
-This will also generate a `poetry.lock` file, you should track this file in version control.
-
-To execute the test suite, call pytest inside Poetry's virtual environment via `poetry run`:
+The project uses UV for dependencies management and packaging and the [pypeline](https://github.com/cuinixam/pypeline) for streamlining the development workflow.
+Use pipx (or your favorite package manager) to install the `pypeline` in an isolated environment:
 
 ```shell
-.venv/Scripts/poetry run pytest
+pipx install pypeline-runner
 ```
 
-Check out the Poetry documentation for more information on the available commands.
+To bootstrap the project and run all the steps configured in the `pypeline.yaml` file, execute the following command:
+
+```shell
+pypeline run
+```
 
 For those using [VS Code](https://code.visualstudio.com/) there are tasks defined for the most common commands:
 
-- bootstrap
-- install dependencies
 - run tests
-- run all checks configured for pre-commit
+- run pre-commit checks (linters, formatters, etc.)
 - generate documentation
 
 See the `.vscode/tasks.json` for more details.

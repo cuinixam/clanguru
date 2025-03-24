@@ -1,0 +1,9 @@
+pipeline:
+  - step: CreateVEnv
+    module: pypeline.steps.create_venv
+  - step: PreCommit
+    run: pre-commit run --all-files
+  - step: PyTest
+    run: pytest
+  - step: Docs
+    run: sphinx-build -E -a docs docs/_build

@@ -2,7 +2,7 @@ import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Type, TypeVar
+from typing import Any, Optional, TypeVar
 
 from clang.cindex import Cursor, CursorKind, Index, SourceRange
 from clang.cindex import Token as _Token
@@ -33,16 +33,16 @@ class Token:
         return f"{self.raw_token.kind.name} ('{self.raw_token.spelling}' at line {self.raw_token.location.line})"
 
 
-class TokensCollection(List[Token]):
-    def __init__(self, tokens: List[Token]) -> None:
+class TokensCollection(list[Token]):
+    def __init__(self, tokens: list[Token]) -> None:
         super().__init__(tokens)
         self.tokens_ordered_dict = OrderedDict((token, token) for token in tokens)
 
-    def first(self) -> Optional[Token]:
+    def first(self) -> Token | None:
         """Get the first token in the collection."""
         return self[0] if self else None
 
-    def find_matching_token(self, raw_token: _Token) -> Optional[Token]:
+    def find_matching_token(self, raw_token: _Token) -> Token | None:
         """Find the token in the collection by the raw token."""
         # TODO: Find a nicer way to do this. Currently we rely on the fact that the token previous and next tokens are ignored while hashing.
         return self.tokens_ordered_dict.get(Token(raw_token, None, None), None)
@@ -68,7 +68,7 @@ class Node:
 class TranslationUnit:
     raw_tu: _TranslationUnit
     tokens: TokensCollection
-    nodes: List[Node]
+    nodes: list[Node]
 
     @property
     def source_file(self) -> Path:
@@ -90,14 +90,14 @@ T = TypeVar("T", bound="Declaration")
 
 
 class Declaration:
-    def __init__(self, name: str, origin: Node, description_token: Optional[Token], body: str):
+    def __init__(self, name: str, origin: Node, description_token: Token | None, body: str):
         self.name = name
         self.origin = origin
         self.description_token = description_token
         self.body = body
 
     @property
-    def description(self) -> Optional[str]:
+    def description(self) -> str | None:
         return CLangParser.get_comment_content(self.description_token) if self.description_token else None
 
 
@@ -112,7 +112,7 @@ class CppClass(Declaration):
 
 
 class Variable(Declaration):
-    def get_init_value(self) -> Optional[str]:
+    def get_init_value(self) -> str | None:
         """Get the initialization value for the variable."""
         var_cursor = self.origin.raw_node
 
@@ -126,7 +126,7 @@ class Variable(Declaration):
         # If no initializer is found
         return None
 
-    def _extract_init_value(self, expr_cursor: Cursor) -> Optional[str]:
+    def _extract_init_value(self, expr_cursor: Cursor) -> str | None:
         """Recursively extract the initialization value from an expression cursor."""
         kind = expr_cursor.kind
 
@@ -179,7 +179,7 @@ class CLangParser:
     def __init__(self) -> None:
         self.index = Index.create()
 
-    def load(self, file: Path, compilation_options_manager: Optional[CompilationOptionsManager] = None) -> TranslationUnit:
+    def load(self, file: Path, compilation_options_manager: CompilationOptionsManager | None = None) -> TranslationUnit:
         args = compilation_options_manager.get_compile_options(file) if compilation_options_manager else []
         translation_unit = TranslationUnit(raw_tu=self.index.parse(str(file), args=args), tokens=TokensCollection([]), nodes=[])
         translation_unit.tokens = self._extract_tokens(translation_unit.raw_tu.cursor)
@@ -187,7 +187,7 @@ class CLangParser:
         return translation_unit
 
     def _extract_tokens(self, cursor: Cursor) -> TokensCollection:
-        tokens: List[Token] = []
+        tokens: list[Token] = []
         for token in cursor.get_tokens():
             current_token = Token(raw_token=token, previous_token=None, next_token=None)
             if tokens:
@@ -197,8 +197,8 @@ class CLangParser:
             tokens.append(current_token)
         return TokensCollection(tokens)
 
-    def _extract_nodes(self, translation_unit: TranslationUnit) -> List[Node]:
-        nodes: List[Node] = []
+    def _extract_nodes(self, translation_unit: TranslationUnit) -> list[Node]:
+        nodes: list[Node] = []
         for child in translation_unit.raw_tu.cursor.get_children():
             current_node = Node(raw_node=child, previous_node=None, next_node=None, tokens=self._collect_node_tokens(child, translation_unit.tokens), parent=translation_unit)
             if nodes:
@@ -220,7 +220,7 @@ class CLangParser:
         return TokensCollection(node_tokens)
 
     @staticmethod
-    def _get_declarations(tu: TranslationUnit, declaration_type: str, declaration_class: Type[T]) -> List[T]:
+    def _get_declarations(tu: TranslationUnit, declaration_type: str, declaration_class: type[T]) -> list[T]:
         declarations = []
         for node in tu.nodes:
             if node.raw_node.kind.name == declaration_type:
@@ -231,19 +231,19 @@ class CLangParser:
         return declarations
 
     @staticmethod
-    def get_functions(tu: TranslationUnit) -> List[Function]:
+    def get_functions(tu: TranslationUnit) -> list[Function]:
         return CLangParser._get_declarations(tu, "FUNCTION_DECL", Function)
 
     @staticmethod
-    def get_variables(tu: TranslationUnit) -> List[Variable]:
+    def get_variables(tu: TranslationUnit) -> list[Variable]:
         return CLangParser._get_declarations(tu, "VAR_DECL", Variable)
 
     @staticmethod
-    def get_classes(tu: TranslationUnit) -> List[CppClass]:
+    def get_classes(tu: TranslationUnit) -> list[CppClass]:
         return CLangParser._get_declarations(tu, "CLASS_DECL", CppClass)
 
     @staticmethod
-    def search_description(node: Node) -> Optional[Token]:
+    def search_description(node: Node) -> Token | None:
         """
         Get the description comment for a node.
 
@@ -290,7 +290,8 @@ class CLangParser:
 
     @staticmethod
     def get_comment_content(token: Token) -> str:
-        """Get the comment content from the token.
+        """
+        Get the comment content from the token.
 
         This method extracts the comment content for single-line, multi-line,and Doxygen style comments.
         It removes the comment delimiters while preserving the internal structure and indentation.

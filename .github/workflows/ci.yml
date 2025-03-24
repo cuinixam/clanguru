@@ -18,7 +18,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
-      - uses: pre-commit/action@v3.0.1
+      - name: Install pypeline runner
+        run: pip install pypeline-runner>=1.9
+        shell: bash
+      - name: Run pypeline
+        run: pypeline run --step PreCommit
+        shell: bash
 
   # Make sure commit messages follow the conventional commits convention:
   # https://www.conventionalcommits.org
@@ -29,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: wagoid/commitlint-github-action@v5.4.5
+      - uses: wagoid/commitlint-github-action@v6
 
   test:
     strategy:
@@ -37,7 +42,7 @@ jobs:
       matrix:
         python-version:
           - "3.10"
-          - "3.11"
+          - "3.13"
         os:
           - ubuntu-latest
           - windows-latest
@@ -48,12 +53,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: snok/install-poetry@v1.3.4
-      - name: Install Dependencies
-        run: poetry install
+      - name: Install pypeline runner
+        run: pip install pypeline-runner>=1.9
         shell: bash
-      - name: Test with Pytest
-        run: poetry run pytest --cov-report=xml
+      - name: Run pypeline
+        run: pypeline run --step CreateVEnv --step PyTest --single
         shell: bash
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.0.1
@@ -63,8 +67,8 @@ jobs:
 
   release:
     needs:
-      - test
       - lint
+      - test
       - commitlint
 
     runs-on: ubuntu-latest
@@ -82,14 +86,15 @@ jobs:
 
         # Do a dry run of release
       - name: Test release
-        uses: python-semantic-release/python-semantic-release@v9.1.1
+        uses: python-semantic-release/python-semantic-release@v9
         if: github.ref_name != 'main'
         with:
           root_options: --noop
+          github_token: noop
 
         # On main branch: actual release + upload to PyPI & GitHub
       - name: Release
-        uses: python-semantic-release/python-semantic-release@v9.1.1
+        uses: python-semantic-release/python-semantic-release@v9
         id: release
         if: github.ref_name == 'main'
         with:

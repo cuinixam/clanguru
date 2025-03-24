@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Union
+from typing import Union
 
 from clanguru.cparser import CLangParser, TranslationUnit
 
@@ -23,8 +23,8 @@ SectionContent = Union[TextContent, CodeContent]
 class Section:
     def __init__(self, title: str):
         self.title = title
-        self.content: List[SectionContent] = []
-        self.subsections: List[Section] = []
+        self.content: list[SectionContent] = []
+        self.subsections: list[Section] = []
 
     def add_content(self, content: SectionContent) -> None:
         self.content.append(content)
@@ -38,7 +38,7 @@ class DocStructure:
 
     def __init__(self, title: str):
         self.title = title
-        self.sections: List[Section] = []
+        self.sections: list[Section] = []
 
     def add_section(self, section: Section) -> None:
         self.sections.append(section)
@@ -129,7 +129,8 @@ class RSTFormatter(OutputFormatter):
 
 
 def generate_doc_structure(translation_unit: TranslationUnit) -> DocStructure:
-    """Generate documentation structure from a translation unit.
+    """
+    Generate documentation structure from a translation unit.
 
     Uses the CLangParser to extract functions and classes from the translation unit
     and creates a DocStructure object with the extracted information.
