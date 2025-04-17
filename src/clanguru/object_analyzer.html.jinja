@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+
+<head>
+    <script>
+        var MY_GRAPH_DATA = {{ graph_data | tojson(indent = 4) }};
+    </script>
+    {% raw %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+    <script src="https://unpkg.com/webcola@3.4.0/WebCola/cola.min.js"></script>
+    <script src="https://unpkg.com/cytoscape-cola@2.5.1/cytoscape-cola.js"></script>
+    <style>
+        body {
+            font-family: helvetica neue, helvetica, liberation sans, arial, sans-serif;
+            font-size: 12px
+        }
+
+        #cy {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            right: 0;
+            z-index: 1;
+        }
+
+        h1 {
+            font-size: 1em;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="cy"></div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log(JSON.stringify(MY_GRAPH_DATA));
+            var cy = window.cy = cytoscape({
+                container: document.getElementById('cy'),
+                autounselectify: true,
+                boxSelectionEnabled: false,
+                layout: {
+                    name: 'cola'
+                },
+                style: [
+                    {
+                        selector: 'node',
+                        css: {
+                            'label': 'data(id)',
+                            'color': 'black',
+                            'width': 'data(size)',
+                            'height': 'data(size)',
+                            'background-color': 'red',
+                            'text-halign': 'center',
+                            'text-valign': 'top',
+                            'font-size': 'data(font_size)',
+                            'content': 'data(content)'
+                        }
+                    },
+
+                    {
+                        selector: 'node:parent',
+                        css: {
+                            'label': 'data(id)',
+                            'background-opacity': 0.333
+                        }
+                    },
+
+                    {
+                        selector: 'edge',
+                        css: {
+                            'width': 1,
+                        }
+                    }
+                ],
+                elements: MY_GRAPH_DATA,
+                zoomingEnabled: true
+            });
+        });
+    </script>
+</body>
+
+</html>
+
+{% endraw %}

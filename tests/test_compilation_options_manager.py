@@ -98,17 +98,17 @@ def test_get_compile_commands() -> None:
 
     try:
         db = CompilationDatabase.from_json_file(tmp_file)
-        commands = db.getCompileCommands(Path("/home/user/project/main.c"))
+        commands = db.get_compile_commands(Path("/home/user/project/main.c"))
         assert len(commands) == 1
         assert commands[0].file == Path("main.c")
         assert commands[0].arguments == ["gcc", "-c", "-I/usr/include", "main.c"]
 
-        commands = db.getCompileCommands(Path("/home/user/project/helper.c"))
+        commands = db.get_compile_commands(Path("/home/user/project/helper.c"))
         assert len(commands) == 1
         assert commands[0].file == Path("helper.c")
         assert commands[0].command == "gcc -c -O2 helper.c"
 
-        commands = db.getCompileCommands(Path("/home/user/project/nonexistent.c"))
+        commands = db.get_compile_commands(Path("/home/user/project/nonexistent.c"))
         assert len(commands) == 0
     finally:
         tmp_file.unlink()

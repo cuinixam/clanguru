@@ -40,6 +40,9 @@ class CompileCommand(DataClassDictMixin):
     def get_file_path(self) -> Path:
         return self.file if self.file.is_absolute() else self.directory / self.file
 
+    def get_output_path(self) -> Path | None:
+        return self.output if self.output and self.output.is_absolute() else (self.directory / self.output if self.output else None)
+
     def clean_up_arguments(self, arguments: list[str]) -> list[str]:
         """
         Clean up the command line to only get the compilation options.
@@ -82,8 +85,16 @@ class CompileCommand(DataClassDictMixin):
 class CompilationDatabase(DataClassJSONMixin):
     commands: list[CompileCommand]
 
-    def getCompileCommands(self, file: Path) -> list[CompileCommand]:
+    def get_compile_commands(self, file: Path) -> list[CompileCommand]:
         return [command for command in self.commands if command.get_file_path() == file]
+
+    def get_output_files(self) -> list[Path]:
+        result = []
+        for command in self.commands:
+            output_path = command.get_output_path()
+            if output_path and output_path not in result:
+                result.append(output_path)
+        return result
 
     class Config(BaseConfig):
         code_generation_options: ClassVar[list[str]] = [TO_DICT_ADD_OMIT_NONE_FLAG]
@@ -113,7 +124,7 @@ class CompilationOptionsManager:
 
     def get_compile_options(self, file: Path) -> list[str]:
         if self.compilation_database:
-            commands: list[CompileCommand] = self.compilation_database.getCompileCommands(file)
+            commands: list[CompileCommand] = self.compilation_database.get_compile_commands(file)
             # TODO: how to handle multiple commands for the same file?
             if commands:
                 return commands[0].get_compile_options()
