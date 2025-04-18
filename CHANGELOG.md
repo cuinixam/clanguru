@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.3.0 (2025-04-18)
+
+### Features
+
+- Support morel nm symbol types
+  ([`f08ffda`](https://github.com/cuinixam/clanguru/commit/f08ffda8d77f0735d5e6c3a5ae55534d57622db6))
+
+
 ## v0.2.0 (2025-04-17)
 
 ### Features
