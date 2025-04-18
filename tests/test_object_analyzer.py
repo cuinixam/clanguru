@@ -42,20 +42,59 @@ def test_get_symbol_various(line, expected_name, expected_linkage):
         assert result.linkage == expected_linkage
 
 
+@pytest.mark.parametrize(
+    "paths, expected_common_path_str",
+    [
+        (
+            [
+                "some/common/path/dir1/CMakeFiles/a.o",
+                "some/common/path/dir1/CMakeFiles/b.o",
+            ],
+            "some/common/path",
+        ),
+        (
+            [
+                "some/common/path/dir1/CMakeFiles/a.o",
+                "some/common/path/dir2/CMakeFiles/b.o",
+            ],
+            "some/common/path",
+        ),
+        (
+            [
+                "some/common/path/dir1/CMakeFiles/a.o",
+                "some/common/path/dir2/dir21/CMakeFiles/b.o",
+                "some/common/path/dir3/dir21/CMakeFiles/b.o",
+            ],
+            "some/common/path",
+        ),
+    ],
+)
+def test_determine_common_path_posix(paths: list[str], expected_common_path_str: str) -> None:
+    """Tests _determine_common_path with POSIX-style paths."""
+    actual_path = ObjectsDependenciesReportGenerator._determine_common_path([Path(p).absolute() for p in paths])
+    assert actual_path == Path(expected_common_path_str).absolute()
+
+
+def create_object_path(file_name: str, rel_path: str | None = None) -> Path:
+    """Helper function to create a Path object from a string."""
+    return Path(rel_path or "some/common/path/dir1/CMakeFiles").joinpath(file_name).absolute()
+
+
 def test_generate_graph_data_basic_dependency_pytest():
     """Pytest: Test graph generation with a simple dependency."""
     # Note: ObjectData now calculates provided/required symbols via cached_property
-    obj_a = ObjectData(Path("a.o"), symbols=[Symbol("func1", SymbolLinkage.LOCAL), Symbol("func2", SymbolLinkage.EXTERN)])
-    obj_b = ObjectData(Path("b.o"), symbols=[Symbol("func2", SymbolLinkage.LOCAL), Symbol("func1", SymbolLinkage.EXTERN)])
+    obj_a = ObjectData(path=create_object_path("a.o"), symbols=[Symbol("func1", SymbolLinkage.LOCAL), Symbol("func2", SymbolLinkage.EXTERN)])
+    obj_b = ObjectData(path=create_object_path("b.o"), symbols=[Symbol("func2", SymbolLinkage.LOCAL), Symbol("func1", SymbolLinkage.EXTERN)])
     objects = [obj_a, obj_b]
-    graph_data = ObjectsDependenciesReportGenerator.generate_graph_data(objects)
+    graph_data = ObjectsDependenciesReportGenerator(objects).generate_graph_data()
 
-    assert len(graph_data["nodes"]) == 2
+    assert len(graph_data["nodes"]) == 3
     assert len(graph_data["edges"]) == 1
 
     node_map = {n["data"]["id"]: n["data"] for n in graph_data["nodes"]}
     assert node_map["a.o"]["size"] == 7  # Base 5 + 1 connection * 2
     assert node_map["b.o"]["size"] == 7  # Base 5 + 1 connection * 2
+    assert node_map["dir1"]["id"] == "dir1"
 
     edge = graph_data["edges"][0]["data"]
     assert edge["id"] == "a.o.b.o"
@@ -66,12 +105,12 @@ def test_generate_graph_data_basic_dependency_pytest():
 
 def test_generate_graph_data_no_dependency_pytest():
     """Pytest: Test graph generation with no dependencies."""
-    obj_a = ObjectData(Path("a.o"), symbols=[Symbol("func1", SymbolLinkage.LOCAL), Symbol("funcX", SymbolLinkage.EXTERN)])
-    obj_b = ObjectData(Path("b.o"), symbols=[Symbol("func2", SymbolLinkage.LOCAL), Symbol("funcY", SymbolLinkage.EXTERN)])
+    obj_a = ObjectData(path=create_object_path("a.o"), symbols=[Symbol("func1", SymbolLinkage.LOCAL), Symbol("funcX", SymbolLinkage.EXTERN)])
+    obj_b = ObjectData(path=create_object_path("b.o"), symbols=[Symbol("func2", SymbolLinkage.LOCAL), Symbol("funcY", SymbolLinkage.EXTERN)])
     objects = [obj_a, obj_b]
-    graph_data = ObjectsDependenciesReportGenerator.generate_graph_data(objects)
+    graph_data = ObjectsDependenciesReportGenerator(objects).generate_graph_data()
 
-    assert len(graph_data["nodes"]) == 2
+    assert len(graph_data["nodes"]) == 3
     assert len(graph_data["edges"]) == 0
 
     node_map = {n["data"]["id"]: n["data"] for n in graph_data["nodes"]}
@@ -82,15 +121,37 @@ def test_generate_graph_data_no_dependency_pytest():
 def test_generate_graph_data_complex_dependencies_pytest():
     """Pytest: Test graph generation with multiple dependencies."""
     obj_a = ObjectData(
-        Path("a.o"), symbols=[Symbol("funcA", SymbolLinkage.LOCAL), Symbol("funcB", SymbolLinkage.EXTERN), Symbol("funcC", SymbolLinkage.EXTERN)]
+        path=create_object_path("a.o"),
+        symbols=[
+            Symbol("funcA", SymbolLinkage.LOCAL),
+            Symbol("funcB", SymbolLinkage.EXTERN),
+            Symbol("funcC", SymbolLinkage.EXTERN),
+        ],
     )  # Provides A, Requires B, C
-    obj_b = ObjectData(Path("b.o"), symbols=[Symbol("funcB", SymbolLinkage.LOCAL), Symbol("funcA", SymbolLinkage.EXTERN)])  # Provides B, Requires A
-    obj_c = ObjectData(Path("c.o"), symbols=[Symbol("funcC", SymbolLinkage.LOCAL)])  # Provides C, Requires nothing
-    obj_d = ObjectData(Path("d.o"), symbols=[Symbol("funcD", SymbolLinkage.LOCAL), Symbol("funcE", SymbolLinkage.EXTERN)])  # Provides D, Requires E (isolated)
+    obj_b = ObjectData(
+        path=create_object_path("b.o"),
+        symbols=[
+            Symbol("funcB", SymbolLinkage.LOCAL),
+            Symbol("funcA", SymbolLinkage.EXTERN),
+        ],
+    )  # Provides B, Requires A
+    obj_c = ObjectData(
+        path=create_object_path("c.o"),
+        symbols=[
+            Symbol("funcC", SymbolLinkage.LOCAL),
+        ],
+    )  # Provides C, Requires nothing
+    obj_d = ObjectData(
+        path=create_object_path("d.o"),
+        symbols=[
+            Symbol("funcD", SymbolLinkage.LOCAL),
+            Symbol("funcE", SymbolLinkage.EXTERN),
+        ],
+    )  # Provides D, Requires E (isolated)
     objects = [obj_a, obj_b, obj_c, obj_d]
-    graph_data = ObjectsDependenciesReportGenerator.generate_graph_data(objects)
+    graph_data = ObjectsDependenciesReportGenerator(objects).generate_graph_data()
 
-    assert len(graph_data["nodes"]) == 4
+    assert len(graph_data["nodes"]) == 5
     assert len(graph_data["edges"]) == 2  # A<->B, A<->C
 
     node_map = {n["data"]["id"]: n["data"] for n in graph_data["nodes"]}
@@ -103,3 +164,29 @@ def test_generate_graph_data_complex_dependencies_pytest():
     edge_ids = {e["data"]["id"] for e in graph_data["edges"]}
     assert "a.o.b.o" in edge_ids
     assert "a.o.c.o" in edge_ids
+
+
+def test_build_directory_tree_basic_structure():
+    """Test the basic structure of the directory tree."""
+    obj_a = ObjectData(path=Path("some/common/path/dir1/CMakeFiles/path/to/ignore/a.o"), symbols=[])
+    obj_c = ObjectData(path=Path("some/common/path/dir1/dir11/dir13/CMakeFiles/path/to/ignore/c.o"), symbols=[])
+    obj_b = ObjectData(path=Path("some/common/path/dir2/dir21/CMakeFiles/path/to/ignore/b.o"), symbols=[])
+    objects = [obj_a, obj_b, obj_c]
+
+    tree = ObjectsDependenciesReportGenerator._build_directory_tree(objects)
+
+    assert tree
+    assert len(tree) == 2, "Two top-level directories after removing the common path"
+    assert tree["dir1"].name == "dir1"
+    assert len(tree["dir1"].objects) == 1
+    assert len(tree["dir1"].children) == 1
+    assert tree["dir1"].children["dir11"].name == "dir11"
+    assert tree["dir1"].children["dir11"].children["dir13"].name == "dir13"
+    assert len(tree["dir1"].children["dir11"].children["dir13"].children) == 0
+    assert len(tree["dir1"].children["dir11"].children["dir13"].objects) == 1
+    assert tree["dir2"].name == "dir2"
+    assert len(tree["dir2"].objects) == 0
+    assert len(tree["dir2"].children) == 1
+    assert tree["dir2"].children["dir21"].name == "dir21"
+    assert len(tree["dir2"].children["dir21"].children) == 0
+    assert len(tree["dir2"].children["dir21"].objects) == 1

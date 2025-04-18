@@ -58,12 +58,13 @@ def parse(
 def analyze(
     compilation_database: Path = typer.Option(help="Compilation database file"),  # noqa: B008
     output_file: Path = typer.Option(help="Output file"),  # noqa: B008
+    use_parent_deps: bool = typer.Option(False, help="Use parent dependencies."),
 ) -> None:
     object_files = CompilationDatabase.from_json_file(compilation_database).get_output_files()
     if not object_files:
         raise UserNotificationException("No object files found in the compilation database.")
     object_data = parse_objects(object_files)
-    ObjectsDependenciesReportGenerator(object_data).generate_report(output_file)
+    ObjectsDependenciesReportGenerator(object_data, use_parent_deps=use_parent_deps).generate_report(output_file)
     logger.info("Dependencies report generated.")
 
 

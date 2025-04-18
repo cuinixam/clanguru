@@ -1,13 +1,16 @@
+import os
 import re
 import subprocess
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from jinja2 import Environment, FileSystemLoader
+from py_app_dev.core.exceptions import UserNotificationException
 from py_app_dev.core.subprocess import SubprocessExecutor
 
 
@@ -90,13 +93,64 @@ def parse_objects(obj_files: list[Path], max_workers: Optional[int] = None) -> l
     return results
 
 
+@dataclass
+class DirectoryNode:
+    """Represents a node in the directory tree."""
+
+    name: str
+    children: dict[str, "DirectoryNode"] = field(default_factory=dict)
+    objects: list[ObjectData] = field(default_factory=list)
+
+
+class DirectoryTreeIterator:
+    """
+    Iterates over a directory tree structure (dict[str, DirectoryNode]) using BFS.
+
+    Yields a tuple of (parent_name, node), where:
+    - parent_name: Optional[str] - The name of the parent node (None for root nodes).
+    - node: Union[DirectoryNode, ObjectData] - The current node or object being visited.
+    """
+
+    def __init__(self, root_nodes: dict[str, DirectoryNode]):
+        self._node_queue: deque[tuple[Optional[str], DirectoryNode]] = deque([(None, node) for node in root_nodes.values()])  # Queue for nodes to visit, with parent name
+        self._object_queue: deque[tuple[str, ObjectData]] = deque()  # Queue for objects to yield from the current node
+
+    def __iter__(self) -> "DirectoryTreeIterator":
+        return self
+
+    def __next__(self) -> tuple[Optional[str], Union[DirectoryNode, ObjectData]]:
+        while True:
+            # If there are objects buffered from the last node, yield them first
+            if self._object_queue:
+                return self._object_queue.popleft()
+
+            # If node queue is empty, iteration is done
+            if not self._node_queue:
+                raise StopIteration
+
+            # Process the next node in the queue
+            parent_name, current_node = self._node_queue.popleft()
+
+            # Add all objects from this node to the object queue
+            for obj in current_node.objects:
+                self._object_queue.append((current_node.name, obj))
+
+            # Add all children nodes to the node queue for future processing
+            for _, child_node in current_node.children.items():
+                self._node_queue.append((current_node.name, child_node))
+
+            # Yield the current node itself
+            return (parent_name, current_node)
+
+
 class ObjectsDependenciesReportGenerator:
-    def __init__(self, object_data: list[ObjectData]):
+    def __init__(self, object_data: list[ObjectData], use_parent_deps: bool = False):
         self.object_data = object_data
+        self.use_parent_deps = use_parent_deps
 
     def generate_report(self, output_file: Path) -> None:
         """Generates the HTML report by rendering the Jinja2 template with the graph data."""
-        graph_data = self.generate_graph_data(self.object_data)
+        graph_data = self.generate_graph_data()
 
         env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
         template = env.get_template("object_analyzer.html.jinja")
@@ -107,9 +161,68 @@ class ObjectsDependenciesReportGenerator:
             file.write(rendered_html)
 
     @staticmethod
-    def generate_graph_data(objects: list[ObjectData]) -> dict[str, list[dict[str, Any]]]:
+    def _build_directory_tree(objects: list[ObjectData]) -> dict[str, DirectoryNode]:
+        """Builds a nested structure representing the directory hierarchy, stopping at 'CMakeFiles'."""
+        common_path = ObjectsDependenciesReportGenerator._determine_common_path([obj.path.absolute() for obj in objects])
+        root_nodes: dict[str, DirectoryNode] = {}
+
+        for obj in objects:
+            obj_relative_path = obj.path.parent.resolve().relative_to(common_path)
+            parts = list(obj_relative_path.parts)
+            parts = parts[: parts.index("CMakeFiles")]  # Keep parts up to, but not including, CMakeFiles
+
+            # Build tree structure and populate objects
+            current_children = root_nodes
+            current_node: Optional[DirectoryNode] = None
+
+            for part in parts:
+                if part not in current_children:
+                    new_node = DirectoryNode(name=part)
+                    current_children[part] = new_node
+                current_node = current_children[part]
+                current_children = current_node.children  # Move deeper
+            # Add the object to the node corresponding to the final directory part
+            if current_node:
+                current_node.objects.append(obj)
+
+        return root_nodes
+
+    @staticmethod
+    def _determine_common_path(objects_paths: list[Path]) -> Path:
+        # Find Common Base Path
+        try:
+            common_base_str = os.path.commonpath([str(path) for path in objects_paths])
+            common_base = Path(common_base_str)
+        except ValueError:
+            raise UserNotificationException("No common base path found. Ensure all object files are in the same directory tree.") from None
+
+        # Check if the common base already contains "CMakeFiles" and return the parent parent directory of "CMakeFiles"
+        if "CMakeFiles" in common_base.parts:
+            cmakefiles_index = common_base.parts.index("CMakeFiles")
+            common_base = Path(*common_base.parts[:cmakefiles_index]).parent
+        else:
+            # We need to make sure that there will be at least one root node.
+            # If all objects are in the same directory the common path will be up to the `CMakeFiles` directory and we will end up with no root node!
+            found_empty_path = False
+            for obj_path in objects_paths:
+                obj_relative_path = obj_path.parent.resolve().relative_to(common_base)
+                parts = list(obj_relative_path.parts)
+                # Check if the path contains "CMakeFiles"
+                try:
+                    cmakefiles_index = parts.index("CMakeFiles")
+                    parts = parts[:cmakefiles_index]  # Keep parts up to, but not including, CMakeFiles
+                except ValueError:
+                    raise UserNotificationException(f"'CMakeFiles' directory not found in the path {obj_relative_path}.") from None
+                if not parts:
+                    found_empty_path = True
+                    break
+            if found_empty_path:
+                common_base = common_base.parent
+        return common_base
+
+    def generate_graph_data(self) -> dict[str, list[dict[str, Any]]]:
         """Converts a list of ObjectData into a dictionary suitable for Cytoscape.js containing nodes and edges representing object dependencies."""
-        nodes = []
+        objects = self.object_data
         edges = []
         edge_set = set()  # To avoid duplicate edges between the same pair
         node_connections = {obj.name: 0 for obj in objects}
@@ -143,22 +256,36 @@ class ObjectsDependenciesReportGenerator:
                         edge_set.add(edge_id)
                         node_connections[obj1.name] += 1
                         node_connections[obj2.name] += 1
-
-        # Create nodes with size based on connections
-        for obj in objects:
-            # Use a minimum size for nodes, e.g., 5, or scale based on connections
-            # Simple scaling: base_size + connections * scale_factor
-            node_size = 5 + node_connections[obj.name] * 2  # Example scaling
-            nodes.append(
-                {
+        nodes = []
+        root_nodes = ObjectsDependenciesReportGenerator._build_directory_tree(objects)
+        # Iterate over the whole node tree to get the nodes
+        for parent_name, node in DirectoryTreeIterator(root_nodes):
+            if isinstance(node, ObjectData):
+                obj = node
+                node_size = 5 + node_connections[obj.name] * 2  # Example scaling
+                data = {
                     "data": {
                         "id": obj.name,
                         "size": node_size,
                         "content": obj.name,  # Display object name
                         "font_size": 10,  # Adjust font size as needed
-                        # parent property is ignored as requested
                     }
                 }
-            )
-
+                if parent_name and self.use_parent_deps:
+                    data["data"]["parent"] = parent_name
+                nodes.append(data)
+            # This is a DirectoryNode
+            else:
+                data = {
+                    "data": {
+                        "id": node.name,
+                        "size": 5,  # Base size for root nodes
+                        "content": node.name,  # Display object name
+                        "font_size": 10,  # Adjust font size as needed
+                        # TODO: populate parent
+                    }
+                }
+                if parent_name and self.use_parent_deps:
+                    data["data"]["parent"] = parent_name
+                nodes.append(data)
         return {"nodes": nodes, "edges": edges}
