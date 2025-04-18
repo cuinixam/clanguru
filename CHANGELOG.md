@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.4.0 (2025-04-18)
+
+### Features
+
+- Create objects parent structure
+  ([`9bf7b3a`](https://github.com/cuinixam/clanguru/commit/9bf7b3ae95985022d869f1873c51c0e20aca5299))
+
+
 ## v0.3.0 (2025-04-18)
 
 ### Features
