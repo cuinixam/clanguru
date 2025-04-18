@@ -63,16 +63,21 @@ class NmExecutor:
 
     @staticmethod
     def get_symbol(nm_symbol_output: str) -> Optional[Symbol]:
-        pattern_linkage: list[tuple[re.Pattern[str], SymbolLinkage]] = [  # Added [str]
-            # undefined externals: no address, just “U”
-            (re.compile(r"^\s*U\s+(\S+)"), SymbolLinkage.EXTERN),
-            # defined text symbols:  address + “T”
-            (re.compile(r"^\s*[0-9A-Fa-f]+\s+T\s+(\S+)"), SymbolLinkage.LOCAL),
-        ]
-        for pattern, linkage in pattern_linkage:
-            m = pattern.match(nm_symbol_output)
-            if m:
-                return Symbol(name=m.group(1), linkage=linkage)
+        # Regex to capture optional address, mandatory uppercase symbol type, and symbol name
+        # Group 1: Symbol Type Letter (e.g., 'U', 'T', 'D', 'B', etc.)
+        # Group 2: Symbol Name
+        pattern: re.Pattern[str] = re.compile(r"^\s*(?:[0-9A-Fa-f]+\s+)?([A-Z])\s+(\S+)")
+        match = pattern.match(nm_symbol_output)
+
+        if match:
+            symbol_type_letter = match.group(1)
+            symbol_name = match.group(2)
+
+            # Determine linkage based on the symbol type letter
+            linkage = SymbolLinkage.EXTERN if symbol_type_letter == "U" else SymbolLinkage.LOCAL
+
+            return Symbol(name=symbol_name, linkage=linkage)
+
         return None
 
 

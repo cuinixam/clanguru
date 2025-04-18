@@ -8,14 +8,26 @@ from clanguru.object_analyzer import NmExecutor, ObjectData, ObjectsDependencies
 @pytest.mark.parametrize(
     "line, expected_name, expected_linkage",
     [
-        # undefined externals
+        # Undefined (EXTERN)
         ("                 U __imp_GetAsyncKeyState", "__imp_GetAsyncKeyState", SymbolLinkage.EXTERN),
-        # defined text symbols => LOCAL (per your mapping)
+        ("                 U another_undefined", "another_undefined", SymbolLinkage.EXTERN),
+        # LOCAL symbols
         ("0000000000000130 T RteGetBrightnessValue", "RteGetBrightnessValue", SymbolLinkage.LOCAL),
-        # lowercase 'b' isn't in the current patterns => None
+        ("0000000000000000 D _data_symbol", "_data_symbol", SymbolLinkage.LOCAL),
+        ("0000000000000008 B _bss_symbol", "_bss_symbol", SymbolLinkage.LOCAL),
+        ("0000000000000004 R _ro_symbol", "_ro_symbol", SymbolLinkage.LOCAL),
+        ("000000000000000c A _abs_symbol", "_abs_symbol", SymbolLinkage.LOCAL),
+        ("                 W _weak_obj", "_weak_obj", SymbolLinkage.LOCAL),
+        ("                 V _weak_ref", "_weak_ref", SymbolLinkage.LOCAL),
+        ("                 C common_symbol", "common_symbol", SymbolLinkage.LOCAL),
+        # Lowercase symbols (should not match the new regex)
         ("0000000000000014 b brightnessValue", None, None),
-        # completely unrelated line => None
+        ("0000000000000020 t local_text", None, None),
+        ("                 w _weak_undef_obj", None, None),
+        ("                 v _weak_undef_ref", None, None),
+        # Invalid / Non-matching lines
         ("garbage line without match", None, None),
+        ("0000000000000000 ? question_mark", None, None),  # ? is not uppercase
     ],
 )
 def test_get_symbol_various(line, expected_name, expected_linkage):
