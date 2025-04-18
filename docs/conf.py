@@ -2,11 +2,8 @@
 #
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
-import os
 import sys
 from pathlib import Path
-
-import mlx.traceability
 
 project_root_path = Path(__file__).parent.parent
 
@@ -40,11 +37,6 @@ myst_enable_extensions = [
     "html_image",
 ]
 
-# TODO: enable this extension when is is supported by readthedocs
-# draw.io config - @see https://pypi.org/project/sphinxcontrib-drawio/
-# extensions.append("sphinxcontrib.drawio")
-# drawio_default_transparency = True
-
 # mermaid config - @see https://pypi.org/project/sphinxcontrib-mermaid/
 extensions.append("sphinxcontrib.mermaid")
 
@@ -57,12 +49,6 @@ extensions.extend(
         "sphinx.ext.viewcode",
     ]
 )
-
-# mlx.traceability config - https://pypi.org/project/mlx-traceability/
-extensions.append("mlx.traceability")
-
-# Make relationship like 'validated_by' be shown for each requirement
-traceability_render_relationship_per_item = True
 
 # The suffix of source filenames.
 source_suffix = [
@@ -94,7 +80,4 @@ html_theme_options = {
     "navigation_with_keys": False,
 }
 html_last_updated_fmt = ""
-html_static_path = [
-    os.path.join(os.path.dirname(mlx.traceability.__file__), "assets"),
-    "_static",
-]
+html_static_path = ["_static"]
