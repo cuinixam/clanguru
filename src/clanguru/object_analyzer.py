@@ -11,7 +11,7 @@ from typing import Any, Optional, Union
 
 from jinja2 import Environment, FileSystemLoader
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from py_app_dev.core.exceptions import UserNotificationException
 from py_app_dev.core.subprocess import SubprocessExecutor
@@ -294,12 +294,72 @@ class ObjectsDependenciesReportGenerator:
         return {"nodes": nodes, "edges": edges}
 
 
+class ExcelColumnMapper:
+    """Manages Excel column mappings for the Objects sheet."""
+
+    def __init__(self) -> None:
+        # Define column positions
+        self.OBJECT_NAME = 1
+        self.FILE_PATH = 2
+        self.PROVIDED_TOTAL = 3
+        self.PROVIDED_USED = 4
+        self.PROVIDED_DEPENDENCIES = 5
+        self.REQUIRED_COUNT = 6
+        self.REQUIRED_DEPENDENCIES = 7
+        self.TOTAL_SYMBOLS = 8
+
+        # Define column groups for headers
+        self.OBJECT_INFO_START = self.OBJECT_NAME
+        self.OBJECT_INFO_END = self.FILE_PATH
+
+        self.PROVIDED_INTERFACES_START = self.PROVIDED_TOTAL
+        self.PROVIDED_INTERFACES_END = self.PROVIDED_DEPENDENCIES
+
+        self.REQUIRED_INTERFACES_START = self.REQUIRED_COUNT
+        self.REQUIRED_INTERFACES_END = self.REQUIRED_DEPENDENCIES
+
+        self.TOTAL_COLUMN = self.TOTAL_SYMBOLS
+
+        # Total number of columns
+        self.TOTAL_COLUMNS = self.TOTAL_SYMBOLS
+
+        # Header texts
+        self.MAIN_HEADERS = {
+            self.OBJECT_INFO_START: "Object Info",
+            self.PROVIDED_INTERFACES_START: "Provided Interfaces",
+            self.REQUIRED_INTERFACES_START: "Required Interfaces",
+            self.TOTAL_COLUMN: "Total",
+        }
+
+        self.SUB_HEADERS = [
+            "Object Name",  # OBJECT_NAME
+            "File Path",  # FILE_PATH
+            "Total",  # PROVIDED_TOTAL
+            "Used",  # PROVIDED_USED
+            "Dependencies",  # PROVIDED_DEPENDENCIES
+            "Count",  # REQUIRED_COUNT
+            "Dependencies",  # REQUIRED_DEPENDENCIES
+            "Symbols",  # TOTAL_SYMBOLS
+        ]
+
+        # Column ranges for merging
+        self.MERGE_RANGES = [
+            "A1:B1",  # Object Info
+            "C1:E1",  # Provided Interfaces
+            "F1:G1",  # Required Interfaces
+        ]
+
+        # Columns that get main headers (for styling)
+        self.MAIN_HEADER_COLUMNS = [self.OBJECT_INFO_START, self.PROVIDED_INTERFACES_START, self.REQUIRED_INTERFACES_START, self.TOTAL_COLUMN]
+
+
 class ObjectsDataExcelReportGenerator:
     """Excel report generator for object data with dependency analysis."""
 
     def __init__(self, object_data: list[ObjectData], use_parent_deps: bool = False) -> None:
         self.object_data = object_data
         self.use_parent_deps = use_parent_deps
+        self.columns = ExcelColumnMapper()
 
     def generate_report(self, output_file: Path) -> None:
         wb = Workbook()
@@ -314,17 +374,30 @@ class ObjectsDataExcelReportGenerator:
             raise RuntimeError("Failed to create worksheet")
         ws.title = "Objects"
 
-        headers = ["Object Name", "File Path", "Provided Symbols", "Required Symbols", "Total Symbols"]
-        self._create_header_row(ws, headers)
+        # Create grouped headers
+        self._create_grouped_headers(ws, self.columns)
 
-        for row, obj in enumerate(self.object_data, 2):
-            ws.cell(row=row, column=1, value=obj.name)
-            ws.cell(row=row, column=2, value=str(obj.path))
-            ws.cell(row=row, column=3, value=len(obj.provided_symbols))
-            ws.cell(row=row, column=4, value=len(obj.required_symbols))
-            ws.cell(row=row, column=5, value=len(obj.symbols))
+        for row, obj in enumerate(self.object_data, 3):  # Start from row 3 due to grouped headers
+            # Calculate dependencies
+            objects_requiring_from_this = [other_obj.name for other_obj in self.object_data if other_obj != obj and obj.provided_symbols.intersection(other_obj.required_symbols)]
+            objects_providing_to_this = [other_obj.name for other_obj in self.object_data if other_obj != obj and other_obj.provided_symbols.intersection(obj.required_symbols)]
 
-        self._auto_adjust_columns(ws, len(headers))
+            # Calculate used provided interfaces (symbols from this object that are actually required by other objects)
+            used_provided_interfaces = set()
+            for other_obj in self.object_data:
+                if other_obj != obj:
+                    used_provided_interfaces.update(obj.provided_symbols.intersection(other_obj.required_symbols))
+
+            ws.cell(row=row, column=self.columns.OBJECT_NAME, value=obj.name)
+            ws.cell(row=row, column=self.columns.FILE_PATH, value=str(obj.path))
+            ws.cell(row=row, column=self.columns.PROVIDED_TOTAL, value=len(obj.provided_symbols))
+            ws.cell(row=row, column=self.columns.PROVIDED_USED, value=len(used_provided_interfaces))
+            ws.cell(row=row, column=self.columns.PROVIDED_DEPENDENCIES, value="\n".join(objects_requiring_from_this) if objects_requiring_from_this else "None")
+            ws.cell(row=row, column=self.columns.REQUIRED_COUNT, value=len(obj.required_symbols))
+            ws.cell(row=row, column=self.columns.REQUIRED_DEPENDENCIES, value="\n".join(objects_providing_to_this) if objects_providing_to_this else "None")
+            ws.cell(row=row, column=self.columns.TOTAL_SYMBOLS, value=len(obj.symbols))
+
+        self._auto_adjust_columns(ws, self.columns.TOTAL_COLUMNS)
 
     def _create_dependency_matrix_sheet(self, wb: Workbook) -> None:
         """Create the Dependency Matrix sheet showing interface dependencies."""
@@ -390,3 +463,42 @@ class ObjectsDataExcelReportGenerator:
         """Auto-adjust column widths."""
         for col in range(1, column_count + 1):
             ws.column_dimensions[get_column_letter(col)].auto_size = True
+
+    def _create_grouped_headers(self, ws: Any, column_mapper: ExcelColumnMapper) -> None:
+        """Create grouped headers with main categories and sub-headers."""
+        # First row - main category headers
+        for start_col in column_mapper.MAIN_HEADER_COLUMNS:
+            ws.cell(row=1, column=start_col, value=column_mapper.MAIN_HEADERS[start_col])
+
+        # Merge cells for main headers
+        for merge_range in column_mapper.MERGE_RANGES:
+            ws.merge_cells(merge_range)
+
+        # Second row - specific column headers
+        sub_headers = column_mapper.SUB_HEADERS
+
+        # Style main headers
+        for col in column_mapper.MAIN_HEADER_COLUMNS:
+            cell = ws.cell(row=1, column=col)
+            cell.font = Font(bold=True, size=12)
+            cell.fill = PatternFill(start_color="B0B0B0", end_color="B0B0B0", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Style and populate sub-headers
+        for col, header in enumerate(sub_headers, 1):
+            cell = ws.cell(row=2, column=col, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Add borders to separate groups
+        thin_border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
+        )
+
+        for row in range(1, 3):
+            for col in range(1, column_mapper.TOTAL_COLUMNS + 1):
+                ws.cell(row=row, column=col).border = thin_border
