@@ -133,6 +133,7 @@ name = "clanguru"
 version = "0.6.1"
 source = { editable = "." }
 dependencies = [
+    { name = "jinja2" },
     { name = "libclang" },
     { name = "mashumaro" },
     { name = "openpyxl" },
@@ -160,6 +161,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "libclang", specifier = ">=18.1,<19" },
     { name = "mashumaro", specifier = ">=3.13,<4" },
     { name = "openpyxl", specifier = ">=3.1,<4" },
