@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.6.2 (2025-07-07)
+
+### Bug Fixes
+
+- Explicit jinja2 dependency missing
+  ([`a820d94`](https://github.com/cuinixam/clanguru/commit/a820d944adf6265e70b6062a2cd38195d44ab291))
+
+
 ## v0.6.1 (2025-07-07)
 
 ### Bug Fixes
