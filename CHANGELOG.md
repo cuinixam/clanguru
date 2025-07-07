@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.6.1 (2025-07-07)
+
+### Bug Fixes
+
+- No apps associated with package clanguru
+  ([`414f697`](https://github.com/cuinixam/clanguru/commit/414f69701e8fe07f890fed951888768ecdb7e6bb))
+
+
 ## v0.6.0 (2025-07-07)
 
 ### Features
