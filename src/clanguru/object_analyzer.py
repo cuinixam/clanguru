@@ -333,8 +333,13 @@ class ObjectsDataExcelReportGenerator:
         interface_usage = self._calculate_interface_usage()
         obj_names = [obj.name for obj in self.object_data]
 
-        headers = ["Object", "Interface", "Usage Count", *obj_names]
+        fixed_headers = ["Object", "Interface", "Usage Count"]
+        headers = [*fixed_headers, *obj_names]
         self._create_header_row(ws, headers)
+
+        # Freeze the first row and fixed headers
+        freeze_column = get_column_letter(len(fixed_headers) + 1)
+        ws.freeze_panes = f"{freeze_column}2"
 
         current_row = 2
         for obj in self.object_data:
