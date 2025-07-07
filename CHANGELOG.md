@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.5.0 (2025-07-07)
+
+### Features
+
+- Add objects data excel report generator
+  ([`e9adab2`](https://github.com/cuinixam/clanguru/commit/e9adab2aa5cb953e7c07296dcc78c0c7ad957b53))
+
+
 ## v0.4.0 (2025-04-18)
 
 ### Features

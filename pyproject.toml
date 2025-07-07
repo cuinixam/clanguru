@@ -4,7 +4,7 @@ requires = [ "setuptools" ]
 
 [project]
 name = "clanguru"
-version = "0.4.0"
+version = "0.5.0"
 description = "C language utils and tools based on the clang and binutils modules."
 readme = "README.md"
 license = { text = "MIT" }
