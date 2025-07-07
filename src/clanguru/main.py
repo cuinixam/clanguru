@@ -9,7 +9,7 @@ from clanguru import __version__
 from clanguru.compilation_options_manager import CompilationDatabase, CompilationOptionsManager
 from clanguru.cparser import CLangParser
 from clanguru.doc_generator import MarkdownFormatter, generate_documentation
-from clanguru.object_analyzer import ObjectsDependenciesReportGenerator, parse_objects
+from clanguru.object_analyzer import ObjectsDataExcelReportGenerator, ObjectsDependenciesReportGenerator, parse_objects
 
 package_name = "clanguru"
 
@@ -64,8 +64,13 @@ def analyze(
     if not object_files:
         raise UserNotificationException("No object files found in the compilation database.")
     object_data = parse_objects(object_files)
-    ObjectsDependenciesReportGenerator(object_data, use_parent_deps=use_parent_deps).generate_report(output_file)
-    logger.info("Dependencies report generated.")
+    # If the file extension is .xls or .xlsx use the ObjectsDataExcelReportGenerator generator.
+    if output_file.suffix == ".xlsx":
+        ObjectsDataExcelReportGenerator(object_data, use_parent_deps=use_parent_deps).generate_report(output_file)
+        logger.info("Dependencies report generated in Excel format.")
+    else:
+        ObjectsDependenciesReportGenerator(object_data, use_parent_deps=use_parent_deps).generate_report(output_file)
+        logger.info("Dependencies report generated.")
 
 
 def main() -> int:

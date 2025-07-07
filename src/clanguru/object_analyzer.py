@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from jinja2 import Environment, FileSystemLoader
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 from py_app_dev.core.exceptions import UserNotificationException
 from py_app_dev.core.subprocess import SubprocessExecutor
 
@@ -289,3 +292,96 @@ class ObjectsDependenciesReportGenerator:
                     data["data"]["parent"] = parent_name
                 nodes.append(data)
         return {"nodes": nodes, "edges": edges}
+
+
+class ObjectsDataExcelReportGenerator:
+    """Excel report generator for object data with dependency analysis."""
+
+    def __init__(self, object_data: list[ObjectData], use_parent_deps: bool = False) -> None:
+        self.object_data = object_data
+        self.use_parent_deps = use_parent_deps
+
+    def generate_report(self, output_file: Path) -> None:
+        wb = Workbook()
+        self._create_objects_sheet(wb)
+        self._create_dependency_matrix_sheet(wb)
+        wb.save(output_file)
+
+    def _create_objects_sheet(self, wb: Workbook) -> None:
+        """Create the Objects sheet with object statistics."""
+        ws = wb.active
+        if ws is None:
+            raise RuntimeError("Failed to create worksheet")
+        ws.title = "Objects"
+
+        headers = ["Object Name", "File Path", "Provided Symbols", "Required Symbols", "Total Symbols"]
+        self._create_header_row(ws, headers)
+
+        for row, obj in enumerate(self.object_data, 2):
+            ws.cell(row=row, column=1, value=obj.name)
+            ws.cell(row=row, column=2, value=str(obj.path))
+            ws.cell(row=row, column=3, value=len(obj.provided_symbols))
+            ws.cell(row=row, column=4, value=len(obj.required_symbols))
+            ws.cell(row=row, column=5, value=len(obj.symbols))
+
+        self._auto_adjust_columns(ws, len(headers))
+
+    def _create_dependency_matrix_sheet(self, wb: Workbook) -> None:
+        """Create the Dependency Matrix sheet showing interface dependencies."""
+        ws = wb.create_sheet("Dependency Matrix")
+
+        interface_usage = self._calculate_interface_usage()
+        obj_names = [obj.name for obj in self.object_data]
+
+        headers = ["Object", "Interface", "Usage Count", *obj_names]
+        self._create_header_row(ws, headers)
+
+        current_row = 2
+        for obj in self.object_data:
+            if not obj.provided_symbols:
+                continue
+
+            for interface_name in sorted(obj.provided_symbols):
+                self._create_dependency_row(ws, current_row, obj.name, interface_name, interface_usage[interface_name])
+                current_row += 1
+
+        self._auto_adjust_columns(ws, len(headers))
+
+    def _create_header_row(self, ws: Any, headers: list[str]) -> None:
+        """Create and style header row."""
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    def _create_dependency_row(self, ws: Any, row: int, obj_name: str, interface_name: str, usage_count: int) -> None:
+        """Create a single dependency matrix row."""
+        ws.cell(row=row, column=1, value=obj_name).font = Font(bold=True)
+        ws.cell(row=row, column=2, value=interface_name)
+
+        usage_cell = ws.cell(row=row, column=3, value=usage_count)
+        usage_cell.font = Font(bold=usage_count > 0)
+        usage_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        for col, requiring_obj in enumerate(self.object_data, 4):
+            if interface_name in requiring_obj.required_symbols:
+                cell = ws.cell(row=row, column=col, value="X")
+                cell.font = Font(bold=True, color="FF0000")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    def _calculate_interface_usage(self) -> dict[str, int]:
+        """Calculate usage count for each interface."""
+        interface_usage = {}
+
+        for obj in self.object_data:
+            for symbol in obj.provided_symbols:
+                usage_count = sum(1 for other_obj in self.object_data if symbol in other_obj.required_symbols)
+                interface_usage[symbol] = usage_count
+
+        return interface_usage
+
+    def _auto_adjust_columns(self, ws: Any, column_count: int) -> None:
+        """Auto-adjust column widths."""
+        for col in range(1, column_count + 1):
+            ws.column_dimensions[get_column_letter(col)].auto_size = True
