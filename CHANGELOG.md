@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.6.0 (2025-07-07)
+
+### Features
+
+- Add column for dependencies to the excel report objects sheet
+  ([`a869a9e`](https://github.com/cuinixam/clanguru/commit/a869a9e8e31adf0f8d047dc87a6fca2f318073e3))
+
+- Fixed headers while scrolling in excel report
+  ([`8567caf`](https://github.com/cuinixam/clanguru/commit/8567caf244b3f854701eb74cea32e0bc166c2232))
+
+
 ## v0.5.0 (2025-07-07)
 
 ### Features
