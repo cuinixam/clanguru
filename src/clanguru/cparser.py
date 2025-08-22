@@ -85,6 +85,12 @@ class TranslationUnit:
             ]
         )
 
+    def parsing_error(self) -> Optional[str]:
+        """Check if there was a parsing error."""
+        if self.raw_tu.diagnostics:
+            return "\n".join(str(d) for d in self.raw_tu.diagnostics)
+        return None
+
 
 T = TypeVar("T", bound="Declaration")
 
