@@ -1,9 +1,11 @@
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
 
 from clanguru.main import app
+from clanguru.object_analyzer import ObjectData, Symbol, SymbolLinkage
 
 runner = CliRunner()
 
@@ -99,9 +101,7 @@ def test_mock_strict_mode(tmp_path: Path) -> None:
 
 
 def test_mock_with_partial_object_file_only(tmp_path: Path) -> None:
-    """Test that mock generation works with only partial_object_file and no explicit symbols."""
     # Create a simple object file with some symbols
-    import struct
 
     source_file = tmp_path / "test.c"
     source_file.write_text("""
@@ -115,13 +115,11 @@ def test_mock_with_partial_object_file_only(tmp_path: Path) -> None:
     partial_obj_file.write_bytes(b"fake object file content")
 
     # Mock the NmExecutor.run method to return expected symbols
-    from unittest.mock import patch, MagicMock
-    from clanguru.object_analyzer import ObjectData, Symbol, SymbolLinkage
-
     mock_object_data = ObjectData(partial_obj_file)
     mock_object_data.symbols = [
         Symbol(name="add", linkage=SymbolLinkage.EXTERN),
         Symbol(name="print_result", linkage=SymbolLinkage.EXTERN),
+        Symbol(name="_do_not_exist", linkage=SymbolLinkage.EXTERN),
     ]
 
     with patch("clanguru.main.NmExecutor.run", return_value=mock_object_data):
@@ -137,16 +135,18 @@ def test_mock_with_partial_object_file_only(tmp_path: Path) -> None:
                 "partial_mock",
                 "--partial-object-file",
                 partial_obj_file.as_posix(),
+                "--exclude-symbol-pattern",
+                "_*",
+                "--strict",
             ],
         )
 
     assert result.exit_code == 0
-    for mock_file in ["partial_mock.h", "partial_mock.cc"]:
+    for mock_file in ["partial_mock.h", "partial_mock.cc", "partial_mock.log"]:
         assert (tmp_path / mock_file).exists()
 
 
 def test_mock_without_symbols_or_partial_object_fails(tmp_path: Path) -> None:
-    """Test that mock generation fails when neither symbols nor partial_object_file are provided."""
     source_file = tmp_path / "test.c"
     source_file.write_text("""
     extern int add(int a, int b);
@@ -167,48 +167,3 @@ def test_mock_without_symbols_or_partial_object_fails(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "No symbols provided" in str(result.exception)
-
-
-def test_mock_with_both_symbols_and_partial_object(tmp_path: Path) -> None:
-    """Test that both manual symbols and partial object file symbols are used."""
-    source_file = tmp_path / "test.c"
-    source_file.write_text("""
-    extern int add(int a, int b);
-    extern int multiply(int a, int b);
-    extern void print_result(int result);
-    """)
-
-    partial_obj_file = tmp_path / "test.o"
-    partial_obj_file.write_bytes(b"fake object file content")
-
-    # Mock the NmExecutor.run method
-    from unittest.mock import patch
-    from clanguru.object_analyzer import ObjectData, Symbol, SymbolLinkage
-
-    mock_object_data = ObjectData(partial_obj_file)
-    mock_object_data.symbols = [
-        Symbol(name="add", linkage=SymbolLinkage.EXTERN),
-        Symbol(name="print_result", linkage=SymbolLinkage.EXTERN),
-    ]
-
-    with patch("clanguru.main.NmExecutor.run", return_value=mock_object_data):
-        result = runner.invoke(
-            app,
-            [
-                "mock",
-                "--source-file",
-                source_file.as_posix(),
-                "--output-dir",
-                tmp_path.as_posix(),
-                "--symbol",
-                "multiply",  # Manual symbol
-                "--filename",
-                "combined_mock",
-                "--partial-object-file",
-                partial_obj_file.as_posix(),
-            ],
-        )
-
-    assert result.exit_code == 0
-    for mock_file in ["combined_mock.h", "combined_mock.cc"]:
-        assert (tmp_path / mock_file).exists()

@@ -51,6 +51,7 @@ def mock(
         None,
         help="Partial link object file to extract symbols from. Symbols will be extracted using nm command and added to the symbol list.",
     ),
+    exclude_symbol_pattern: list[str] = typer.Option(None, help="Symbol patterns to exclude from mock generation (glob patterns). Can be used multiple times."),  # noqa: B008
     strict: bool = typer.Option(True, help="Fail if some symbols are not found or source files have compilation errors."),
 ) -> None:
     # Determine which symbols to use
@@ -66,7 +67,7 @@ def mock(
         # Ensure we have symbols to mock
         raise UserNotificationException("No symbols provided. Either specify --symbol or provide --partial-object-file.")
 
-    MocksGenerator(source_file, symbols, output_dir, filename, mock_type, compilation_database, strict).generate()
+    MocksGenerator(source_file, symbols, output_dir, filename, mock_type, compilation_database, exclude_symbol_pattern, strict).generate()
 
 
 @app.command(help="Parse C source code and print the translation unit.")

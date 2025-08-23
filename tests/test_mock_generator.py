@@ -6,6 +6,8 @@ from clanguru.mock_generator import (
     FoundFunction,
     FoundVariable,
     FunctionArgument,
+    MocksGenerator,
+    MockType,
     extract_symbols_data,
     find_symbols,
 )
@@ -117,3 +119,46 @@ def test_symbol_declared_in_source_file(tmp_path: Path) -> None:
     data = extract_symbols_data(results)
     my_func = assert_element_of_type(data, FoundFunction)
     assert my_func.name == "foo"
+
+
+def write_source(tmp_path: Path) -> Path:
+    header = tmp_path / "api.h"
+    header.write_text(
+        dedent(
+            """
+            extern int foo(int a, int b);
+            extern int global_counter;
+            """
+        )
+    )
+    source = tmp_path / "impl.c"
+    source.write_text(
+        dedent(
+            """
+            #include "api.h"
+            int foo(int a, int b) { return a + b; }
+            int global_counter = 0;
+            """
+        )
+    )
+    return source
+
+
+def test_generate_exclude_symbols(tmp_path: Path) -> None:
+    source = write_source(tmp_path)
+    outdir = tmp_path / "out"
+    gen = MocksGenerator(
+        source_files=[source],
+        symbols=["foo", "global_counter", "_global", "mem_copy"],
+        output_dir=outdir,
+        filename="mock_my_comp",
+        mock_type=MockType.GMOCK,
+        exclude_symbol_patterns=["_*", "mem_copy"],
+        compilation_database=None,
+    )
+    gen.generate()
+    log_file = outdir / "mock_my_comp.log"
+    assert log_file.exists()
+    log_file_content = log_file.read_text()
+    for symbol in ["_global", "mem_copy"]:
+        assert f"{symbol} : reason=excluded_by_pattern" in log_file_content

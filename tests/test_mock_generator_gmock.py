@@ -31,7 +31,7 @@ def write_source(tmp_path: Path) -> Path:
 def test_generate_gmock(tmp_path: Path) -> None:
     source = write_source(tmp_path)
     outdir = tmp_path / "out"
-    gen = MocksGenerator([source], ["foo", "global_counter"], outdir, "mock_my_comp", MockType.GMOCK, None)
+    gen = MocksGenerator([source], ["foo", "global_counter"], outdir, "mock_my_comp", MockType.GMOCK, None, [])
     gen.generate()
     header = outdir / "mock_my_comp.h"
     source_code = outdir / "mock_my_comp.cc"

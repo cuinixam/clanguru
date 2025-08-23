@@ -1,3 +1,4 @@
+import fnmatch
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
@@ -31,6 +32,7 @@ class MockGenerationIssues:
     parse_errors: list[FileParseResult]
     missing_symbols: list[str]
     unsupported_functions: list[str]  # e.g., variadic functions
+    excluded_symbols: list[str]  # symbols excluded by patterns
 
     @property
     def has_any_issues(self) -> bool:
@@ -291,6 +293,15 @@ class MockGenerationReport:
                 lines.append(f"  function {func_name} : reason=variadic_not_supported")
         lines.append("")
 
+        # Excluded symbols
+        lines.append("excluded symbols:")
+        if not issues.excluded_symbols:
+            lines.append("  (none)")
+        else:
+            for symbol in issues.excluded_symbols:
+                lines.append(f"  {symbol} : reason=excluded_by_pattern")
+        lines.append("")
+
         # Missing symbols
         lines.append("missing symbols:")
         if not issues.missing_symbols:
@@ -307,6 +318,7 @@ class MockGenerationReport:
                 f"  functions mocked: {len(rendered_functions)}",
                 f"  variables mocked: {len(rendered_variables)}",
                 f"  functions skipped (variadic): {len(issues.unsupported_functions)}",
+                f"  symbols excluded: {len(issues.excluded_symbols)}",
                 f"  symbols missing: {len(issues.missing_symbols)}",
                 f"  status: {status}",
             ]
@@ -321,6 +333,8 @@ class MockGenerationReport:
                 lines.append(f"  - missing_symbol:{symbol}")
             for func_name in issues.unsupported_functions:
                 lines.append(f"  - unsupported_variadic:{func_name}")
+            for symbol in issues.excluded_symbols:
+                lines.append(f"  - excluded_symbol:{symbol}")
 
         return "\n".join(lines) + "\n"
 
@@ -365,6 +379,7 @@ class MocksGenerator:
         filename: str,
         mock_type: MockType,
         compilation_database: Path | None,
+        exclude_symbol_patterns: Iterable[str] | None = None,
         strict: bool = True,
     ) -> None:
         self.source_files = list(source_files)
@@ -373,6 +388,7 @@ class MocksGenerator:
         self.filename = filename
         self.mock_type = mock_type
         self.compilation_database = compilation_database
+        self.exclude_symbol_patterns = list(exclude_symbol_patterns) if exclude_symbol_patterns else []
         self.strict = strict
         self.env = Environment(
             loader=FileSystemLoader(str(Path(__file__).parent / "templates")),
@@ -384,10 +400,21 @@ class MocksGenerator:
     def generate(self) -> None:
         """Generate mock files with comprehensive error reporting."""
         tus = self._parse_sources()
-        symbols_data = extract_symbols_data(find_symbols(tus, self.symbols))
+
+        # Apply symbol exclusion patterns before finding symbols
+        filtered_symbols = self._filter_excluded_symbols(self.symbols)
+        excluded_symbols = list(self.symbols - filtered_symbols)
+
+        # Log excluded symbols
+        if excluded_symbols:
+            from py_app_dev.core.logging import logger
+
+            logger.info(f"Excluded {len(excluded_symbols)} symbols matching exclude patterns: {sorted(excluded_symbols)}")
+
+        symbols_data = extract_symbols_data(find_symbols(tus, filtered_symbols))
 
         # Collect all issues in structured format
-        issues = self._analyze_generation_results(tus, symbols_data)
+        issues = self._analyze_generation_results(tus, symbols_data, excluded_symbols, filtered_symbols)
 
         # Determine what can actually be rendered
         filtered_data = self._filter_renderable_symbols(symbols_data)
@@ -440,7 +467,26 @@ class MocksGenerator:
         for name, content in rendered.items():
             (self.output_dir / name).write_text(content if content.endswith("\n") else content + "\n")
 
-    def _analyze_generation_results(self, translation_units: list[TranslationUnit], symbols_data: list[FoundVariable | FoundFunction]) -> MockGenerationIssues:
+    def _filter_excluded_symbols(self, symbols: set[str]) -> set[str]:
+        """Filter out symbols that match any exclude pattern."""
+        if not self.exclude_symbol_patterns:
+            return symbols
+
+        filtered_symbols = set()
+        for symbol in symbols:
+            excluded = False
+            for pattern in self.exclude_symbol_patterns:
+                if fnmatch.fnmatch(symbol, pattern):
+                    excluded = True
+                    break
+            if not excluded:
+                filtered_symbols.add(symbol)
+
+        return filtered_symbols
+
+    def _analyze_generation_results(
+        self, translation_units: list[TranslationUnit], symbols_data: list[FoundVariable | FoundFunction], excluded_symbols: list[str], filtered_symbols: set[str]
+    ) -> MockGenerationIssues:
         """Analyze parsing and symbol extraction results to identify issues."""
         # Parse results
         parse_errors = []
@@ -448,9 +494,9 @@ class MocksGenerator:
             error = tu.parsing_error()
             parse_errors.append(FileParseResult(path=path, error=error))
 
-        # Missing symbols
+        # Missing symbols (only from symbols that were not excluded)
         found_symbol_names = {symbol.name for symbol in symbols_data}
-        missing_symbols = sorted(self.symbols - found_symbol_names)
+        missing_symbols = sorted(filtered_symbols - found_symbol_names)
 
         # Unsupported functions (e.g., variadic)
         unsupported_functions = []
@@ -462,6 +508,7 @@ class MocksGenerator:
             parse_errors=parse_errors,
             missing_symbols=missing_symbols,
             unsupported_functions=unsupported_functions,
+            excluded_symbols=excluded_symbols,
         )
 
     def _filter_renderable_symbols(self, symbols_data: list[FoundVariable | FoundFunction]) -> list[FoundVariable | FoundFunction]:
@@ -491,5 +538,6 @@ class MocksGenerator:
 
     def _write_log(self, content: str) -> None:
         """Write log content to the log file."""
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         log_file = self.output_dir / f"{self.filename}.log"
         log_file.write_text(content if content.endswith("\n") else content + "\n")

@@ -1,5 +1,3 @@
-"""Tests for the MockGenerationReport class."""
-
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -19,7 +17,6 @@ from clanguru.mock_generator import (
 
 @pytest.fixture
 def mock_translation_unit():
-    """Create a mock translation unit for testing."""
     mock_tu = Mock()
     mock_tu.source_file = Path("/fake/source.c")
     return mock_tu
@@ -27,7 +24,6 @@ def mock_translation_unit():
 
 @pytest.fixture
 def sample_found_function(mock_translation_unit):
-    """Create a sample FoundFunction for testing."""
     # Create a mock symbol that behaves like a Function declaration
     mock_symbol = Mock()
     mock_symbol.kind.name = "FUNCTION_DECL"
@@ -41,7 +37,6 @@ def sample_found_function(mock_translation_unit):
 
 @pytest.fixture
 def sample_found_variable(mock_translation_unit):
-    """Create a sample FoundVariable for testing."""
     # Create a mock symbol that behaves like a Variable declaration
     mock_symbol = Mock()
     mock_symbol.kind.name = "VAR_DECL"
@@ -52,7 +47,6 @@ def sample_found_variable(mock_translation_unit):
 
 
 def test_file_parse_result():
-    """Test FileParseResult dataclass."""
     # Successful parse
     success_result = FileParseResult(path=Path("test.c"), error=None)
     assert success_result.is_successful is True
@@ -63,9 +57,8 @@ def test_file_parse_result():
 
 
 def test_mock_generation_issues():
-    """Test MockGenerationIssues dataclass."""
     # No issues
-    no_issues = MockGenerationIssues(parse_errors=[FileParseResult(Path("test.c"), None)], missing_symbols=[], unsupported_functions=[])
+    no_issues = MockGenerationIssues(parse_errors=[FileParseResult(Path("test.c"), None)], missing_symbols=[], unsupported_functions=[], excluded_symbols=[])
     assert no_issues.has_any_issues is False
     assert len(no_issues.parse_errors_with_failures) == 0
 
@@ -74,6 +67,7 @@ def test_mock_generation_issues():
         parse_errors=[FileParseResult(Path("good.c"), None), FileParseResult(Path("bad.c"), "syntax error")],
         missing_symbols=["missing_func"],
         unsupported_functions=["variadic_func"],
+        excluded_symbols=["excluded_func"],
     )
     assert with_issues.has_any_issues is True
     assert len(with_issues.parse_errors_with_failures) == 1
@@ -81,10 +75,9 @@ def test_mock_generation_issues():
 
 
 def test_mock_generation_report_success(sample_found_function, sample_found_variable):
-    """Test report generation for successful case."""
     report_generator = MockGenerationReport(filename="test_mock", mock_type=MockType.GMOCK, requested_symbols={"test_function", "test_variable"})
 
-    issues = MockGenerationIssues(parse_errors=[FileParseResult(Path("test.c"), None)], missing_symbols=[], unsupported_functions=[])
+    issues = MockGenerationIssues(parse_errors=[FileParseResult(Path("test.c"), None)], missing_symbols=[], unsupported_functions=[], excluded_symbols=[])
 
     report = report_generator.generate_report(issues=issues, rendered_functions=[sample_found_function], rendered_variables=[sample_found_variable], status="success")
 
@@ -103,13 +96,13 @@ def test_mock_generation_report_success(sample_found_function, sample_found_vari
 
 
 def test_mock_generation_report_with_failures():
-    """Test report generation with various failures."""
     report_generator = MockGenerationReport(filename="failed_mock", mock_type=MockType.GMOCK, requested_symbols={"existing_func", "missing_func", "variadic_func"})
 
     issues = MockGenerationIssues(
         parse_errors=[FileParseResult(Path("good.c"), None), FileParseResult(Path("bad.c"), "header not found")],
         missing_symbols=["missing_func"],
         unsupported_functions=["variadic_func"],
+        excluded_symbols=[],
     )
 
     report = report_generator.generate_report(
@@ -135,10 +128,9 @@ def test_mock_generation_report_with_failures():
 
 
 def test_mock_generation_report_empty_case():
-    """Test report generation with no sources or symbols."""
     report_generator = MockGenerationReport(filename="empty_mock", mock_type=MockType.GMOCK, requested_symbols=set())
 
-    issues = MockGenerationIssues(parse_errors=[], missing_symbols=[], unsupported_functions=[])
+    issues = MockGenerationIssues(parse_errors=[], missing_symbols=[], unsupported_functions=[], excluded_symbols=[])
 
     report = report_generator.generate_report(issues=issues, rendered_functions=[], rendered_variables=[], status="success")
 
