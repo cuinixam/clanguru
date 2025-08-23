@@ -1,6 +1,13 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TypeAlias
+from enum import Enum
+from pathlib import Path
+from typing import Protocol, TypeAlias, runtime_checkable
 
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from py_app_dev.core.exceptions import UserNotificationException
+
+from clanguru.compilation_options_manager import CompilationOptionsManager
 from clanguru.cparser import CLangParser, Function, TranslationUnit, Variable
 
 
@@ -16,6 +23,27 @@ class FoundVariable:
     name: str
     type: str
     origin: FoundSymbol
+
+    def is_constant(self) -> bool:
+        t = self.type.strip()
+        return t.startswith("const ") or t.endswith(" const")
+
+    def get_definition(self) -> str:
+        return f"{self.type} {self.name}".strip()
+
+    def initializer(self) -> str:
+        t = self.type.strip()
+        if self.is_constant() and (t.startswith("struct ") or t.endswith("_t")):
+            return f"({t}){{0}}"
+        if "[" in t and "]" in t:
+            return "{0}"
+        if t.endswith("*"):
+            return f"({t})0"
+        if t.startswith("struct "):
+            return f"({t}){{0}}"
+        if t == "void":
+            return "void"
+        return f"({t})0"
 
 
 @dataclass
@@ -34,6 +62,47 @@ class FoundFunction:
     return_type: str
     parameters: list[FunctionArgument]
     origin: FoundSymbol
+
+    def get_param_types(self) -> str:
+        parts: list[str] = []
+        unnamed_index = 1
+        for p in self.parameters:
+            ptype = " ".join(p.type.split())
+            pname = p.name or f"unnamed{unnamed_index}"
+            if not p.name:
+                unnamed_index += 1
+            if ptype.endswith("[]"):
+                parts.append(f"{ptype[:-2]} {pname}[]")
+            else:
+                parts.append(f"{ptype} {pname}".strip())
+        return ", ".join(parts)
+
+    def has_return_value(self) -> bool:
+        return (self.return_type or "void") != "void"
+
+    def default_return(self) -> str:
+        rt = self.return_type or "void"
+        if rt == "void":
+            return "void"
+        if rt.endswith("*"):
+            return f"({rt})0"
+        if rt.startswith("struct "):
+            return f"({rt}){{0}}"
+        return f"({rt})0"
+
+    def get_call(self) -> str:
+        args = []
+        unnamed_index = 1
+        for p in self.parameters:
+            name = p.name or f"unnamed{unnamed_index}"
+            if not p.name:
+                unnamed_index += 1
+            args.append(name)
+        return f"{self.name}({', '.join(args)})"
+
+    def get_signature(self) -> str:
+        param_types = self.get_param_types()
+        return f"{self.return_type or 'void'} {self.name}({param_types})" if param_types else f"{self.return_type or 'void'} {self.name}()"
 
 
 Decl: TypeAlias = Function | Variable
@@ -125,3 +194,98 @@ def extract_symbols_data(symbols: list[FoundSymbol]) -> list[FoundVariable | Fou
             data.append(FoundFunction(name=sym.name, return_type=return_type, parameters=params, origin=fs))
     data.sort(key=lambda s: s.name)
     return data
+
+
+class MockType(Enum):
+    GMOCK = "gmock"
+    CMOCK = "cmock"
+
+
+@runtime_checkable
+class TemplateRenderer(Protocol):
+    def render_all(self, *, data: list[FoundVariable | FoundFunction], missing: list[str]) -> dict[str, str]: ...
+
+
+class GMockTemplateRenderer:
+    def __init__(self, filename: str, output_dir: Path, env: Environment) -> None:
+        self.filename = filename
+        self.output_dir = output_dir
+        self.env = env
+
+    def render_all(self, *, data: list[FoundVariable | FoundFunction], missing: list[str]) -> dict[str, str]:
+        variables = [v for v in data if isinstance(v, FoundVariable)]
+        functions = [f for f in data if isinstance(f, FoundFunction) and not any(p.is_variadic for p in f.parameters)]
+        headers = sorted({f.origin.header_file for f in functions if f.origin.header_file} | {v.origin.header_file for v in variables if v.origin.header_file})
+        ctx = {
+            "filename": self.filename,
+            "variables": variables,
+            "functions": functions,
+            "headers": headers,
+            "missing": missing,
+        }
+        return {
+            f"{self.filename}.h": self.env.get_template("mock/gmock/header.h.j2").render(**ctx),
+            f"{self.filename}.cc": self.env.get_template("mock/gmock/source.cc.j2").render(**ctx),
+            f"{self.filename}.log": self._render_log(functions, variables, missing),
+        }
+
+    def _render_log(self, functions: list[FoundFunction], variables: list[FoundVariable], missing: list[str]) -> str:
+        lines = [f"functions: {len(functions)}", f"variables: {len(variables)}"]
+        if missing:
+            lines.append("missing: " + ",".join(missing))
+        return "\n".join(lines) + "\n"
+
+
+class MocksGenerator:
+    def __init__(
+        self,
+        source_files: Iterable[Path],
+        symbols: Iterable[str],
+        output_dir: Path,
+        filename: str,
+        mock_type: MockType,
+        compilation_database: Path | None,
+        strict: bool = True,
+    ) -> None:
+        self.source_files = list(source_files)
+        self.symbols = set(symbols)
+        self.output_dir = output_dir
+        self.filename = filename
+        self.mock_type = mock_type
+        self.compilation_database = compilation_database
+        self.strict = strict
+        self.env = Environment(
+            loader=FileSystemLoader(str(Path(__file__).parent / "templates")),
+            autoescape=select_autoescape(enabled_extensions=("j2",)),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+
+    def generate(self) -> None:
+        tus = self._parse_sources()
+        symbols_data = extract_symbols_data(find_symbols(tus, self.symbols))
+        missing = sorted(self.symbols - {d.name for d in symbols_data})
+        renderer = self._select_renderer()
+        rendered = renderer.render_all(data=symbols_data, missing=missing)
+        self._write_outputs(rendered)
+
+    def _parse_sources(self) -> list[TranslationUnit]:
+        parser = CLangParser()
+        compile_commands = CompilationOptionsManager(self.compilation_database) if self.compilation_database else None
+        tus: list[TranslationUnit] = []
+        for path in self.source_files:
+            tu = parser.load(path, compile_commands)
+            if (err := tu.parsing_error()) and self.strict:
+                raise UserNotificationException(f"Parsing error in {path}: {err}")
+            tus.append(tu)
+        return tus
+
+    def _select_renderer(self) -> TemplateRenderer:
+        if self.mock_type == MockType.GMOCK:
+            return GMockTemplateRenderer(self.filename, self.output_dir, self.env)
+        raise NotImplementedError("Mock type not implemented")  # pragma: no cover
+
+    def _write_outputs(self, rendered: dict[str, str]) -> None:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        for name, content in rendered.items():
+            (self.output_dir / name).write_text(content if content.endswith("\n") else content + "\n")

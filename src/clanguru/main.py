@@ -9,6 +9,7 @@ from clanguru import __version__
 from clanguru.compilation_options_manager import CompilationDatabase, CompilationOptionsManager
 from clanguru.cparser import CLangParser
 from clanguru.doc_generator import MarkdownFormatter, generate_documentation
+from clanguru.mock_generator import MocksGenerator, MockType
 from clanguru.object_analyzer import ObjectsDataExcelReportGenerator, ObjectsDependenciesReportGenerator, parse_objects
 
 package_name = "clanguru"
@@ -35,6 +36,20 @@ def generate(
     parser = CLangParser()
     translation_unit = parser.load(source_file, CompilationOptionsManager(compilation_database))
     generate_documentation(translation_unit, MarkdownFormatter(), output_file)
+
+
+@app.command(help="Generate mocks for C functions and variables.")
+@time_it("mock")
+def mock(
+    source_file: list[Path] = typer.Option(..., help="Input source file(s). Can be used multiple times."),  # noqa: B008
+    symbol: list[str] = typer.Option(..., help="Symbols to mock. Can be used multiple times."),  # noqa: B008
+    output_dir: Path = typer.Option(..., help="Output directory."),  # noqa: B008
+    filename: str = typer.Option(help="Filename for generated mock files."),
+    mock_type: MockType = typer.Option(MockType.GMOCK, case_sensitive=False, help="Type of mocks to generate. Supported: gmock (Google Test), cmock (CMock)."),  # noqa: B008
+    compilation_database: Path | None = typer.Option(None, help="Compilation database file required if the source file includes external headers."),  # noqa: B008
+    strict: bool = typer.Option(True, help="Fail if some symbols are not found or source files have compilation errors."),
+) -> None:
+    MocksGenerator(source_file, symbol, output_dir, filename, mock_type, compilation_database, strict).generate()
 
 
 @app.command(help="Parse C source code and print the translation unit.")

@@ -1,0 +1,33 @@
+#ifndef {{filename}}_h
+#define {{filename}}_h
+
+#include "gmock/gmock.h"
+
+extern "C" {
+{% for header in headers %}
+#include "{{ header }}"
+{% endfor %}
+} /* extern "C" */
+
+class class_mockup;
+typedef class_mockup* mock_ptr_t;
+extern mock_ptr_t mockup_global_ptr;
+
+class class_mockup {
+
+public:
+   class_mockup()  { mockup_global_ptr = this; }
+   ~class_mockup() { mockup_global_ptr = nullptr; }
+{% for function in functions %}
+   MOCK_METHOD(({{function.return_type}}), {{function.name}}, ({{function.get_param_types()}}));
+{% endfor %}
+}; /* class_mockup */
+
+/* Version A: Create a local object that is destroyed when out of scope */
+#define CREATE_MOCK(name)   class_mockup name
+
+/* Version B: Allocate an object that will be only explicitly deallocated */
+#define CREATE_PERSISTENT_MOCK()     new class_mockup
+#define DESTROY_PERSISTENT_MOCK()    {if(mockup_global_ptr) delete mockup_global_ptr;}
+
+#endif /* {{filename}}_h */

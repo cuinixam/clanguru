@@ -1,0 +1,28 @@
+#include "{{filename}}.h"
+
+mock_ptr_t mockup_global_ptr = nullptr;
+
+{% for variable in variables %}
+{% if variable.is_constant() %}
+{{ variable.get_definition() }} = {{ variable.initializer() }};
+{% else %}
+{{ variable.get_definition() }};
+{% endif %}
+{% endfor %}
+
+extern "C" {
+{% for function in functions %}
+
+{{function.get_signature()}}{
+{% if function.has_return_value() %}
+    if(mockup_global_ptr)
+        return mockup_global_ptr->{{function.get_call()}};
+    else
+        return {{function.default_return()}};
+{% else %}
+    if(mockup_global_ptr)
+        mockup_global_ptr->{{function.get_call()}};
+{% endif %}
+} /* {{function.name}} */
+{% endfor %}
+}
