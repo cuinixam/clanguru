@@ -7,6 +7,7 @@ from clanguru.mock_generator import (
     FoundVariable,
     FunctionArgument,
     MocksGenerator,
+    MocksGeneratorConfig,
     MockType,
     extract_symbols_data,
     find_symbols,
@@ -147,14 +148,17 @@ def write_source(tmp_path: Path) -> Path:
 def test_generate_exclude_symbols(tmp_path: Path) -> None:
     source = write_source(tmp_path)
     outdir = tmp_path / "out"
+    config = MocksGeneratorConfig(
+        mock_type=MockType.GMOCK,
+        exclude_symbol_patterns=["_*", "mem_copy"],
+    )
     gen = MocksGenerator(
         source_files=[source],
         symbols=["foo", "global_counter", "_global", "mem_copy"],
         output_dir=outdir,
         filename="mock_my_comp",
-        mock_type=MockType.GMOCK,
-        exclude_symbol_patterns=["_*", "mem_copy"],
         compilation_database=None,
+        config=config,
     )
     gen.generate()
     log_file = outdir / "mock_my_comp.log"
@@ -162,3 +166,39 @@ def test_generate_exclude_symbols(tmp_path: Path) -> None:
     log_file_content = log_file.read_text()
     for symbol in ["_global", "mem_copy"]:
         assert f"{symbol} : reason=excluded_by_pattern" in log_file_content
+
+
+def test_generate_with_config_file(tmp_path: Path) -> None:
+    # Create source files
+    source = write_source(tmp_path)
+    outdir = tmp_path / "out"
+
+    # Create config file
+    config_file = tmp_path / "mock_config.yaml"
+    config_file.write_text("""
+strict: false
+exclude_symbol_patterns:
+  - "_*"
+  - "mem_copy"
+mock_type: gmock
+""")
+
+    # Load config from file and create generator
+    config = MocksGeneratorConfig.from_file(config_file)
+    gen = MocksGenerator(
+        source_files=[source],
+        symbols=["foo", "global_counter", "_global", "mem_copy"],
+        output_dir=outdir,
+        filename="mock_my_comp",
+        compilation_database=None,
+        config=config,
+    )
+    gen.generate()
+
+    # Verify results
+    log_file = outdir / "mock_my_comp.log"
+    assert log_file.exists()
+    log_file_content = log_file.read_text()
+    for symbol in ["_global", "mem_copy"]:
+        assert f"{symbol} : reason=excluded_by_pattern" in log_file_content
+    assert "status: success" in log_file_content  # Should succeed since strict=false

@@ -2,7 +2,7 @@ import textwrap
 from pathlib import Path
 from textwrap import dedent
 
-from clanguru.mock_generator import MocksGenerator, MockType
+from clanguru.mock_generator import MocksGenerator, MocksGeneratorConfig
 
 
 def write_source(tmp_path: Path) -> Path:
@@ -31,7 +31,8 @@ def write_source(tmp_path: Path) -> Path:
 def test_generate_gmock(tmp_path: Path) -> None:
     source = write_source(tmp_path)
     outdir = tmp_path / "out"
-    gen = MocksGenerator([source], ["foo", "global_counter"], outdir, "mock_my_comp", MockType.GMOCK, None, [])
+    config = MocksGeneratorConfig()
+    gen = MocksGenerator([source], ["foo", "global_counter"], outdir, "mock_my_comp", None, config)
     gen.generate()
     header = outdir / "mock_my_comp.h"
     source_code = outdir / "mock_my_comp.cc"

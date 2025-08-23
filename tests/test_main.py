@@ -167,3 +167,50 @@ def test_mock_without_symbols_or_partial_object_fails(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "No symbols provided" in str(result.exception)
+
+
+def test_mock_with_config_file(tmp_path: Path) -> None:
+    source_file = tmp_path / "test.c"
+    source_file.write_text("""
+    extern int add(int a, int b);
+    extern int print_result(int value);
+    int add(int a, int b) { return a + b; }
+    int print_result(int value) { printf("%d\\n", value); return 0; }
+    """)
+
+    config_file = tmp_path / "mock_config.yaml"
+    config_file.write_text("""
+strict: false
+exclude_symbol_patterns:
+  - "_*"
+mock_type: gmock
+""")
+
+    result = runner.invoke(
+        app,
+        [
+            "mock",
+            "--source-file",
+            source_file.as_posix(),
+            "--symbol",
+            "add",
+            "--symbol",
+            "print_result",
+            "--symbol",
+            "_internal_func",
+            "--output-dir",
+            tmp_path.as_posix(),
+            "--filename",
+            "config_mock",
+            "--config-file",
+            config_file.as_posix(),
+        ],
+    )
+    assert result.exit_code == 0
+    for mock_file in ["config_mock.h", "config_mock.cc", "config_mock.log"]:
+        assert (tmp_path / mock_file).exists()
+
+    # Check that the excluded symbol is mentioned in the log
+    log_content = (tmp_path / "config_mock.log").read_text()
+    assert "_internal_func : reason=excluded_by_pattern" in log_content
+    assert "status: success" in log_content

@@ -8,5 +8,5 @@
   },
   "python.analysis.typeCheckingMode": "basic",
   "json.format.keepLines": true,
-  "cSpell.ignoreWords": [ "clanguru", "cparser", "clang" ]
+  "cSpell.ignoreWords": [ "clanguru", "cparser", "clang", "gmock" ]
 }

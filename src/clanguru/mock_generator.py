@@ -3,10 +3,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Protocol, TypeAlias, runtime_checkable
+from typing import Any, Protocol, TypeAlias, runtime_checkable
 
+import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from mashumaro import DataClassDictMixin
 from py_app_dev.core.exceptions import UserNotificationException
+from yaml.parser import ParserError
+from yaml.scanner import ScannerError
 
 from clanguru.compilation_options_manager import CompilationOptionsManager
 from clanguru.cparser import CLangParser, Function, TranslationUnit, Variable
@@ -370,6 +374,31 @@ class GMockTemplateRenderer:
         }
 
 
+@dataclass
+class MocksGeneratorConfig(DataClassDictMixin):
+    strict: bool = True
+    exclude_symbol_patterns: list[str] | None = None
+    mock_type: MockType = MockType.GMOCK
+
+    @classmethod
+    def from_file(cls, config_file: Path) -> "MocksGeneratorConfig":
+        config_dict = cls.parse_to_dict(config_file)
+        return cls.from_dict(config_dict)
+
+    @staticmethod
+    def parse_to_dict(config_file: Path) -> dict[str, Any]:
+        try:
+            with open(config_file) as fs:
+                config_dict = yaml.safe_load(fs)
+                # Add file name to config to keep track of where configuration was loaded from
+                config_dict["file"] = config_file
+            return config_dict
+        except ScannerError as e:
+            raise UserNotificationException(f"Failed scanning configuration file '{config_file}'. \nError: {e}") from e
+        except ParserError as e:
+            raise UserNotificationException(f"Failed parsing configuration file '{config_file}'. \nError: {e}") from e
+
+
 class MocksGenerator:
     def __init__(
         self,
@@ -377,19 +406,17 @@ class MocksGenerator:
         symbols: Iterable[str],
         output_dir: Path,
         filename: str,
-        mock_type: MockType,
         compilation_database: Path | None,
-        exclude_symbol_patterns: Iterable[str] | None = None,
-        strict: bool = True,
+        config: MocksGeneratorConfig,
     ) -> None:
         self.source_files = list(source_files)
         self.symbols = set(symbols)
         self.output_dir = output_dir
         self.filename = filename
-        self.mock_type = mock_type
         self.compilation_database = compilation_database
-        self.exclude_symbol_patterns = list(exclude_symbol_patterns) if exclude_symbol_patterns else []
-        self.strict = strict
+        self.mock_type = config.mock_type
+        self.exclude_symbol_patterns = list(config.exclude_symbol_patterns) if config.exclude_symbol_patterns else []
+        self.strict = config.strict
         self.env = Environment(
             loader=FileSystemLoader(str(Path(__file__).parent / "templates")),
             autoescape=select_autoescape(enabled_extensions=("j2",)),
