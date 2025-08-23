@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: 3.x
       - name: Install pypeline runner
-        run: pip install pypeline-runner>=1.15.1
+        run: pip install pypeline-runner>=1.16
         shell: bash
       - name: Run pypeline
         run: pypeline run --step PreCommit
@@ -54,13 +54,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install pypeline runner
-        run: pip install pypeline-runner>=1.15.1
+        run: pip install pypeline-runner>=1.16
         shell: bash
       - name: Run pypeline
         run: pypeline run --step CreateVEnv --step PyTest --single
         shell: bash
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v4.0.1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: cuinixam/clanguru
