@@ -73,7 +73,26 @@ def test_mock_strict_mode(tmp_path: Path) -> None:
     """)
     result = runner.invoke(
         app,
-        ["mock", "--source-file", source_file.as_posix(), "--output-dir", tmp_path.as_posix(), "--symbol", "non_existent_function", "--filename", "my_mock", "--strict"],
+        [
+            "mock",
+            "--source-file",
+            source_file.as_posix(),
+            "--output-dir",
+            tmp_path.as_posix(),
+            "--symbol",
+            "non_existent_function",
+            "--filename",
+            "my_mock",
+            "--strict",
+        ],
     )
+    # Expect failure with aggregated error message directing user to log file.
     assert result.exit_code != 0
-    assert "fatal error: 'non_existent.h' file not found" in str(result.exception)
+    assert "Mock generation for 'my_mock' failed" in str(result.exception)
+    log_file = tmp_path / "my_mock.log"
+    assert log_file.exists()
+    log_content = log_file.read_text()
+    # Ensure the log captures parsing error and missing symbol summary.
+    assert "non_existent.h" in log_content  # parsing error recorded
+    assert "missing_symbol:non_existent_function" in log_content or "non_existent_function" in log_content
+    assert "status: failed" in log_content

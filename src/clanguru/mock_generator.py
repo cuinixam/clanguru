@@ -12,6 +12,38 @@ from clanguru.cparser import CLangParser, Function, TranslationUnit, Variable
 
 
 @dataclass
+class FileParseResult:
+    """Result of parsing a single source file."""
+
+    path: Path
+    error: str | None
+
+    @property
+    def is_successful(self) -> bool:
+        """True if parsing succeeded without errors."""
+        return self.error is None
+
+
+@dataclass
+class MockGenerationIssues:
+    """Collection of all issues found during mock generation."""
+
+    parse_errors: list[FileParseResult]
+    missing_symbols: list[str]
+    unsupported_functions: list[str]  # e.g., variadic functions
+
+    @property
+    def has_any_issues(self) -> bool:
+        """True if any issues were found."""
+        return bool(self.parse_errors_with_failures or self.missing_symbols or self.unsupported_functions)
+
+    @property
+    def parse_errors_with_failures(self) -> list[FileParseResult]:
+        """Only parse results that failed."""
+        return [result for result in self.parse_errors if not result.is_successful]
+
+
+@dataclass
 class FoundSymbol:
     translation_unit: TranslationUnit
     symbol: "Decl"
@@ -201,6 +233,98 @@ class MockType(Enum):
     CMOCK = "cmock"
 
 
+class MockGenerationReport:
+    """Handles creation of detailed mock generation reports."""
+
+    def __init__(self, filename: str, mock_type: MockType, requested_symbols: set[str]) -> None:
+        self.filename = filename
+        self.mock_type = mock_type
+        self.requested_symbols = requested_symbols
+
+    def generate_report(
+        self,
+        *,
+        issues: MockGenerationIssues,
+        rendered_functions: list[FoundFunction],
+        rendered_variables: list[FoundVariable],
+        status: str,
+    ) -> str:
+        """Generate a comprehensive mock generation report."""
+        lines: list[str] = []
+
+        # Header
+        lines.extend([f"mock generation report for: {self.filename}", f"mock type: {self.mock_type.value}", ""])
+
+        # Sources section
+        lines.append("sources:")
+        if not issues.parse_errors:
+            lines.append("  (no sources processed)")
+        else:
+            for result in issues.parse_errors:
+                status_text = "OK" if result.is_successful else f"ERROR - {result.error}"
+                lines.append(f"  {result.path} : {status_text}")
+        lines.append("")
+
+        # Requested symbols
+        requested = sorted(self.requested_symbols)
+        lines.extend([f"requested symbols ({len(requested)}):", *[f"  {symbol}" for symbol in requested], ""])
+
+        # Successfully mocked symbols
+        lines.append("mocked symbols:")
+        if not rendered_functions and not rendered_variables:
+            lines.append("  (none)")
+        else:
+            for func in rendered_functions:
+                header_info = func.origin.header_file or "-"
+                lines.append(f"  function {func.name} -> header={header_info}")
+            for var in rendered_variables:
+                header_info = var.origin.header_file or "-"
+                lines.append(f"  variable {var.name} -> header={header_info}")
+        lines.append("")
+
+        # Skipped symbols
+        lines.append("skipped symbols:")
+        if not issues.unsupported_functions:
+            lines.append("  (none)")
+        else:
+            for func_name in issues.unsupported_functions:
+                lines.append(f"  function {func_name} : reason=variadic_not_supported")
+        lines.append("")
+
+        # Missing symbols
+        lines.append("missing symbols:")
+        if not issues.missing_symbols:
+            lines.append("  (none)")
+        else:
+            for symbol in issues.missing_symbols:
+                lines.append(f"  {symbol} : reason=not_found")
+        lines.append("")
+
+        # Summary
+        lines.extend(
+            [
+                "summary:",
+                f"  functions mocked: {len(rendered_functions)}",
+                f"  variables mocked: {len(rendered_variables)}",
+                f"  functions skipped (variadic): {len(issues.unsupported_functions)}",
+                f"  symbols missing: {len(issues.missing_symbols)}",
+                f"  status: {status}",
+            ]
+        )
+
+        # Raw issues for debugging
+        if issues.has_any_issues:
+            lines.extend(["", "issues (raw):"])
+            for result in issues.parse_errors_with_failures:
+                lines.append(f"  - parse_error:{result.path}:{result.error}")
+            for symbol in issues.missing_symbols:
+                lines.append(f"  - missing_symbol:{symbol}")
+            for func_name in issues.unsupported_functions:
+                lines.append(f"  - unsupported_variadic:{func_name}")
+
+        return "\n".join(lines) + "\n"
+
+
 @runtime_checkable
 class TemplateRenderer(Protocol):
     def render_all(self, *, data: list[FoundVariable | FoundFunction], missing: list[str]) -> dict[str, str]: ...
@@ -213,6 +337,9 @@ class GMockTemplateRenderer:
         self.env = env
 
     def render_all(self, *, data: list[FoundVariable | FoundFunction], missing: list[str]) -> dict[str, str]:
+        # NOTE: filtering of unsupported (e.g. variadic) functions is expected to
+        # be handled by the caller (MocksGenerator). We keep an extra guard here
+        # to avoid generating invalid mocks if used directly somewhere else.
         variables = [v for v in data if isinstance(v, FoundVariable)]
         functions = [f for f in data if isinstance(f, FoundFunction) and not any(p.is_variadic for p in f.parameters)]
         headers = sorted({f.origin.header_file for f in functions if f.origin.header_file} | {v.origin.header_file for v in variables if v.origin.header_file})
@@ -226,14 +353,7 @@ class GMockTemplateRenderer:
         return {
             f"{self.filename}.h": self.env.get_template("mock/gmock/header.h.j2").render(**ctx),
             f"{self.filename}.cc": self.env.get_template("mock/gmock/source.cc.j2").render(**ctx),
-            f"{self.filename}.log": self._render_log(functions, variables, missing),
         }
-
-    def _render_log(self, functions: list[FoundFunction], variables: list[FoundVariable], missing: list[str]) -> str:
-        lines = [f"functions: {len(functions)}", f"variables: {len(variables)}"]
-        if missing:
-            lines.append("missing: " + ",".join(missing))
-        return "\n".join(lines) + "\n"
 
 
 class MocksGenerator:
@@ -262,23 +382,52 @@ class MocksGenerator:
         )
 
     def generate(self) -> None:
+        """Generate mock files with comprehensive error reporting."""
         tus = self._parse_sources()
         symbols_data = extract_symbols_data(find_symbols(tus, self.symbols))
-        missing = sorted(self.symbols - {d.name for d in symbols_data})
+
+        # Collect all issues in structured format
+        issues = self._analyze_generation_results(tus, symbols_data)
+
+        # Determine what can actually be rendered
+        filtered_data = self._filter_renderable_symbols(symbols_data)
+        rendered_functions = [f for f in filtered_data if isinstance(f, FoundFunction)]
+        rendered_variables = [v for v in filtered_data if isinstance(v, FoundVariable)]
+
+        # If strict mode and issues found, write failure log and raise
+        if self.strict and issues.has_any_issues:
+            report_content = self._create_report(issues=issues, rendered_functions=rendered_functions, rendered_variables=rendered_variables, status="failed")
+            self._write_log(report_content)
+            raise UserNotificationException(f"Mock generation for '{self.filename}' failed. See '{self.output_dir / f'{self.filename}.log'}' for details.")
+
+        # Success path: generate files then write success log
         renderer = self._select_renderer()
-        rendered = renderer.render_all(data=symbols_data, missing=missing)
+        rendered = renderer.render_all(data=filtered_data, missing=issues.missing_symbols)
         self._write_outputs(rendered)
 
+        report_content = self._create_report(issues=issues, rendered_functions=rendered_functions, rendered_variables=rendered_variables, status="success")
+        self._write_log(report_content)
+
     def _parse_sources(self) -> list[TranslationUnit]:
-        parser = CLangParser()
+        """
+        Parse all source files into translation units (no error collection).
+
+        If multiple sources are provided they are parsed in parallel to speed
+        up processing. Errors are inspected later in generate().
+        """
         compile_commands = CompilationOptionsManager(self.compilation_database) if self.compilation_database else None
-        tus: list[TranslationUnit] = []
-        for path in self.source_files:
-            tu = parser.load(path, compile_commands)
-            if (err := tu.parsing_error()) and self.strict:
-                raise UserNotificationException(f"Parsing error in {path}: {err}")
-            tus.append(tu)
-        return tus
+        if len(self.source_files) <= 1:
+            parser = CLangParser()
+            return [parser.load(self.source_files[0], compile_commands)] if self.source_files else []
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        def worker(path: Path) -> TranslationUnit:
+            p = CLangParser()
+            return p.load(path, compile_commands)
+
+        with ThreadPoolExecutor(max_workers=min(8, len(self.source_files))) as ex:
+            return list(ex.map(worker, self.source_files))
 
     def _select_renderer(self) -> TemplateRenderer:
         if self.mock_type == MockType.GMOCK:
@@ -286,6 +435,61 @@ class MocksGenerator:
         raise NotImplementedError("Mock type not implemented")  # pragma: no cover
 
     def _write_outputs(self, rendered: dict[str, str]) -> None:
+        """Write all rendered mock files to the output directory."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
         for name, content in rendered.items():
             (self.output_dir / name).write_text(content if content.endswith("\n") else content + "\n")
+
+    def _analyze_generation_results(self, translation_units: list[TranslationUnit], symbols_data: list[FoundVariable | FoundFunction]) -> MockGenerationIssues:
+        """Analyze parsing and symbol extraction results to identify issues."""
+        # Parse results
+        parse_errors = []
+        for path, tu in zip(self.source_files, translation_units):
+            error = tu.parsing_error()
+            parse_errors.append(FileParseResult(path=path, error=error))
+
+        # Missing symbols
+        found_symbol_names = {symbol.name for symbol in symbols_data}
+        missing_symbols = sorted(self.symbols - found_symbol_names)
+
+        # Unsupported functions (e.g., variadic)
+        unsupported_functions = []
+        for symbol in symbols_data:
+            if isinstance(symbol, FoundFunction) and any(p.is_variadic for p in symbol.parameters):
+                unsupported_functions.append(symbol.name)
+
+        return MockGenerationIssues(
+            parse_errors=parse_errors,
+            missing_symbols=missing_symbols,
+            unsupported_functions=unsupported_functions,
+        )
+
+    def _filter_renderable_symbols(self, symbols_data: list[FoundVariable | FoundFunction]) -> list[FoundVariable | FoundFunction]:
+        """Filter out symbols that cannot be rendered (e.g., variadic functions)."""
+        return [symbol for symbol in symbols_data if not (isinstance(symbol, FoundFunction) and any(p.is_variadic for p in symbol.parameters))]
+
+    def _create_report(
+        self,
+        *,
+        issues: MockGenerationIssues,
+        rendered_functions: list[FoundFunction],
+        rendered_variables: list[FoundVariable],
+        status: str,
+    ) -> str:
+        """Create a detailed generation report using the report generator."""
+        report_generator = MockGenerationReport(
+            filename=self.filename,
+            mock_type=self.mock_type,
+            requested_symbols=self.symbols,
+        )
+        return report_generator.generate_report(
+            issues=issues,
+            rendered_functions=rendered_functions,
+            rendered_variables=rendered_variables,
+            status=status,
+        )
+
+    def _write_log(self, content: str) -> None:
+        """Write log content to the log file."""
+        log_file = self.output_dir / f"{self.filename}.log"
+        log_file.write_text(content if content.endswith("\n") else content + "\n")
