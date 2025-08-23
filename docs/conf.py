@@ -17,7 +17,7 @@ for path in ["src", "tests"]:
 project = "clanguru"
 copyright = "2024, cuinixam"
 author = "cuinixam"
-release = "0.6.2"
+release = "0.7.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

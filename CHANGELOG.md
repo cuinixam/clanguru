@@ -1,6 +1,29 @@
 # CHANGELOG
 
 
+## v0.7.0 (2025-08-23)
+
+### Features
+
+- Add mock configuration file option
+  ([`6b993fa`](https://github.com/cuinixam/clanguru/commit/6b993faef1e2e1453d2cc9c521943dea800ede02))
+
+- Add mock exclude patterns
+  ([`9e51ec6`](https://github.com/cuinixam/clanguru/commit/9e51ec6b60466d143e13a915eac4e9b217c96478))
+
+- Add mock generate command for gmock files
+  ([`830a442`](https://github.com/cuinixam/clanguru/commit/830a4426eec5f4fb61d0970f8c3ac3b7dbd0f645))
+
+- Add mock partial link object argument
+  ([`05a5735`](https://github.com/cuinixam/clanguru/commit/05a5735f92233b69966c0bef0fd9d6b47a951a89))
+
+- Find symbols in translation units
+  ([`1cfebcc`](https://github.com/cuinixam/clanguru/commit/1cfebcc97e0c5f456dc06789798f6b3d579ee880))
+
+- Generate mock log file per execution
+  ([`9e67022`](https://github.com/cuinixam/clanguru/commit/9e6702296b1277a5cc9a9f19c32bc4165c54e82e))
+
+
 ## v0.6.2 (2025-07-07)
 
 ### Bug Fixes
