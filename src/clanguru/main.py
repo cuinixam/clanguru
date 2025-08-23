@@ -10,7 +10,7 @@ from clanguru.compilation_options_manager import CompilationDatabase, Compilatio
 from clanguru.cparser import CLangParser
 from clanguru.doc_generator import MarkdownFormatter, generate_documentation
 from clanguru.mock_generator import MocksGenerator, MockType
-from clanguru.object_analyzer import ObjectsDataExcelReportGenerator, ObjectsDependenciesReportGenerator, parse_objects
+from clanguru.object_analyzer import NmExecutor, ObjectsDataExcelReportGenerator, ObjectsDependenciesReportGenerator, parse_objects
 
 package_name = "clanguru"
 
@@ -42,14 +42,31 @@ def generate(
 @time_it("mock")
 def mock(
     source_file: list[Path] = typer.Option(..., help="Input source file(s). Can be used multiple times."),  # noqa: B008
-    symbol: list[str] = typer.Option(..., help="Symbols to mock. Can be used multiple times."),  # noqa: B008
+    symbol: list[str] = typer.Option(None, help="Symbols to mock. Can be used multiple times. Optional if partial_object_file is provided."),  # noqa: B008
     output_dir: Path = typer.Option(..., help="Output directory."),  # noqa: B008
     filename: str = typer.Option(help="Filename for generated mock files."),
     mock_type: MockType = typer.Option(MockType.GMOCK, case_sensitive=False, help="Type of mocks to generate. Supported: gmock (Google Test), cmock (CMock)."),  # noqa: B008
     compilation_database: Path | None = typer.Option(None, help="Compilation database file required if the source file includes external headers."),  # noqa: B008
+    partial_object_file: Path | None = typer.Option(  # noqa: B008
+        None,
+        help="Partial link object file to extract symbols from. Symbols will be extracted using nm command and added to the symbol list.",
+    ),
     strict: bool = typer.Option(True, help="Fail if some symbols are not found or source files have compilation errors."),
 ) -> None:
-    MocksGenerator(source_file, symbol, output_dir, filename, mock_type, compilation_database, strict).generate()
+    # Determine which symbols to use
+    if partial_object_file:
+        # If partial object file is provided, use symbols from it
+        object_data = NmExecutor.run(partial_object_file)
+        symbols = list(object_data.required_symbols)
+        logger.info(f"Extracted {len(symbols)} symbols from {partial_object_file}: {symbols}")
+    elif symbol:
+        # Otherwise use manually specified symbols
+        symbols = list(symbol)
+    else:
+        # Ensure we have symbols to mock
+        raise UserNotificationException("No symbols provided. Either specify --symbol or provide --partial-object-file.")
+
+    MocksGenerator(source_file, symbols, output_dir, filename, mock_type, compilation_database, strict).generate()
 
 
 @app.command(help="Parse C source code and print the translation unit.")
