@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.8.0 (2025-08-25)
+
+### Features
+
+- Filter compile database for source files
+  ([`635831f`](https://github.com/cuinixam/clanguru/commit/635831fe9fb1dd667569e7664dd24e1bb851843a))
+
+
 ## v0.7.0 (2025-08-23)
 
 ### Features
