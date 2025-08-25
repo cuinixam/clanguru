@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -132,3 +133,35 @@ class CompilationOptionsManager:
 
     def set_default_options(self, options: list[str]) -> None:
         self.default_options = options
+
+
+def filter_compilation_database(compilation_database: CompilationDatabase, source_files: list[Path]) -> CompilationDatabase:
+    """
+    Return a filtered ``CompilationDatabase`` containing only commands for the requested source files.
+
+    Each item in ``source_files`` is interpreted in one of two ways:
+    * Absolute (or explicitly relative path with directories): we require a normalized (but not symlink-resolved) full path match.
+    * Bare filename (no directory components): we match any command whose input file's basename equals that filename.
+    """
+
+    def _normalize_path(p: Path) -> Path:
+        return Path(os.path.normpath(str(p)))
+
+    requested_full_paths: set[Path] = set()
+    requested_basenames: set[str] = set()
+
+    for source_file in source_files:
+        source_file_path = Path(source_file)
+        if source_file_path.is_absolute() or source_file_path.parent != Path("."):
+            requested_full_paths.add(_normalize_path(source_file_path if source_file_path.is_absolute() else (Path.cwd() / source_file_path)))
+        else:
+            requested_basenames.add(source_file_path.name)
+
+    matched: list[CompileCommand] = []
+    for cmd in compilation_database.commands:
+        cmd_path = cmd.get_file_path()
+        cmd_full_norm = _normalize_path(cmd_path if cmd_path.is_absolute() else (Path.cwd() / cmd_path))
+        if cmd_full_norm in requested_full_paths or cmd_path.name in requested_basenames:
+            matched.append(cmd)
+
+    return CompilationDatabase(commands=matched)

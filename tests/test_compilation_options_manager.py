@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from clanguru.compilation_options_manager import CompilationDatabase, CompilationOptionsManager, CompileCommand
+from clanguru.compilation_options_manager import (
+    CompilationDatabase,
+    CompilationOptionsManager,
+    CompileCommand,
+    filter_compilation_database,
+)
 
 
 @pytest.fixture
@@ -153,3 +158,33 @@ def test_clean_up_arguments_with_partial_paths(compile_command):
     arguments = ["gcc", "-DStuff", "-I/home/user/project", "-Werror", "-Wall", "-c", "project/input.c", "-o", "project/output.o"]
     expected = ["-DStuff", "-I/home/user/project", "-Werror", "-Wall"]
     assert compile_command.clean_up_arguments(arguments) == expected
+
+
+def test_filter_compilation_database(tmp_path: Path) -> None:
+    db_content = [
+        {
+            "directory": "C:/project/build",
+            "command": f"g++.exe -std=gnu++14  -o {file_name}.obj -c C:/project/src/{file_name}",
+            "file": f"{tmp_path}/{file_name}",
+            "output": f"C:/project/build/{file_name}.obj",
+        }
+        for file_name in ["a.c", "b.c", "c.c"]
+    ]
+    db_content.append(
+        {
+            "directory": "C:/project",
+            "command": "g++.exe -std=gnu++14  -o d.cc.obj -c C:/project/src/d.cc",
+            "file": "src/d.cc",
+            "output": "C:/project/build/d.cc.obj",
+        }
+    )
+    db_file = tmp_path / "compile_commands.json"
+    db_file.write_text(json.dumps(db_content))
+
+    db = CompilationDatabase.from_json_file(db_file)
+
+    # Filter for a.c and c.c
+    filtered = filter_compilation_database(db, [tmp_path / "a.c", Path("b.c"), Path("C:/project/src/d.cc")])
+    assert len(filtered.commands) == 3
+    kept_files = sorted(cmd.get_file_path().name for cmd in filtered.commands)
+    assert kept_files == ["a.c", "b.c", "d.cc"]
