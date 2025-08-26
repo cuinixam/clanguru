@@ -2,7 +2,7 @@ import io
 import json
 import os
 import traceback
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
@@ -26,9 +26,12 @@ class PathField(SerializableType):
 class CompileCommand(DataClassDictMixin):
     directory: Path
     file: Path
-    arguments: list[str] = field(default_factory=list)
+    arguments: list[str] | None = None
     command: str | None = None
     output: Path | None = None
+
+    class Config(BaseConfig):
+        code_generation_options: ClassVar[list[str]] = [TO_DICT_ADD_OMIT_NONE_FLAG]
 
     def get_compile_options(self) -> list[str]:
         options = []
@@ -111,7 +114,7 @@ class CompilationDatabase(DataClassJSONMixin):
         return result
 
     def to_json_string(self) -> str:
-        return json.dumps(self.to_dict(omit_none=True), indent=2)
+        return json.dumps(self.to_dict(omit_none=True)["commands"], indent=2)
 
     def to_json_file(self, file_path: Path) -> None:
         file_path.write_text(self.to_json_string())

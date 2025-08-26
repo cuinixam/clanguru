@@ -188,3 +188,28 @@ def test_filter_compilation_database(tmp_path: Path) -> None:
     assert len(filtered.commands) == 3
     kept_files = sorted(cmd.get_file_path().name for cmd in filtered.commands)
     assert kept_files == ["a.c", "b.c", "d.cc"]
+
+
+def test_to_json(tmp_path: Path) -> None:
+    db_content = [
+        {
+            "directory": str(Path("/home/user/project")),
+            "file": "main.c",
+            "arguments": ["gcc", "-c", "-I/usr/include", "main.c"],
+            "output": "main.o",
+        },
+        {
+            "directory": str(Path("/home/user/project")),
+            "file": "helper.c",
+            "command": "gcc -c -O2 helper.c",
+            "output": "helper.o",
+        },
+    ]
+    db_file = tmp_path / "compile_commands.json"
+    db_file.write_text(json.dumps(db_content))
+
+    db = CompilationDatabase.from_json_file(db_file)
+    json_output = db.to_json_string()
+
+    expected_output = json.dumps(db_content, indent=2)
+    assert json.loads(json_output) == json.loads(expected_output)
