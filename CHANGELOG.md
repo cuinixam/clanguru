@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.8.1 (2025-08-26)
+
+### Bug Fixes
+
+- Compile commands json export is invalid
+  ([`ff13606`](https://github.com/cuinixam/clanguru/commit/ff136067da32298093d3f0a53951b5a19af2f381))
+
+
 ## v0.8.0 (2025-08-25)
 
 ### Features

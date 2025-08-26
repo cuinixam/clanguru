@@ -1,6 +1,6 @@
 [project]
 name = "clanguru"
-version = "0.8.0"
+version = "0.8.1"
 description = "C language utils and tools based on the clang and binutils modules."
 readme = "README.md"
 license = { text = "MIT" }
