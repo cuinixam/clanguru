@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.9.0 (2025-08-28)
+
+### Features
+
+- Add table formatter for docs generator
+  ([`b235405`](https://github.com/cuinixam/clanguru/commit/b2354056aaa718cc21b3bf6584dc426bd950c7cf))
+
+
 ## v0.8.1 (2025-08-26)
 
 ### Bug Fixes
