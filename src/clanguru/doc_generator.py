@@ -49,18 +49,27 @@ class OutputFormatter(ABC):
 
     @abstractmethod
     def format(self, doc: DocStructure) -> str:
+        """Format the entire documentation structure."""
         pass
 
     @abstractmethod
     def format_text(self, text: str) -> str:
+        """Format a text block."""
         pass
 
     @abstractmethod
     def format_code(self, code: str, language: str) -> str:
+        """Format a code block."""
         pass
 
     @abstractmethod
     def file_extension(self) -> str:
+        """Return the file extension for the formatter."""
+        pass
+
+    @abstractmethod
+    def format_table(self, headers: list[str], rows: list[list[str]]) -> str:
+        """Format a table with headers and rows."""
         pass
 
 
@@ -89,6 +98,12 @@ class MarkdownFormatter(OutputFormatter):
 
     def format_code(self, code: str, language: str) -> str:
         return f"```{language}\n{code}\n```"
+
+    def format_table(self, headers: list[str], rows: list[list[str]]) -> str:
+        header_line = "| " + " | ".join(headers) + " |"
+        separator_line = "| " + " | ".join(["---"] * len(headers)) + " |"
+        row_lines = ["| " + " | ".join(row) + " |" for row in rows]
+        return "\n".join([header_line, separator_line, *row_lines]) + "\n"
 
     def file_extension(self) -> str:
         return "md"
@@ -126,6 +141,33 @@ class RSTFormatter(OutputFormatter):
 
     def file_extension(self) -> str:
         return "rst"
+
+    def format_table(self, headers: list[str], rows: list[list[str]]) -> str:
+        """Format a simple grid table in reStructuredText."""
+        if not headers:
+            return ""
+
+        # Determine column widths based on headers and rows
+        col_widths: list[int] = []
+        for i, header in enumerate(headers):
+            max_cell = max((len(row[i]) for row in rows), default=0)
+            col_widths.append(max(len(header), max_cell))
+
+        def sep(char: str) -> str:
+            return "+" + "+".join(char * (w + 2) for w in col_widths) + "+"
+
+        def make_row(columns: list[str]) -> str:
+            return "|" + "|".join(f" {c.ljust(w)} " for c, w in zip(columns, col_widths)) + "|"
+
+        top = sep("-")
+        header_sep = sep("=")
+        row_sep = sep("-")
+
+        lines: list[str] = [top, make_row(headers), header_sep]
+        for row in rows:
+            lines.append(make_row(row))
+            lines.append(row_sep)
+        return "\n".join(lines) + "\n"
 
 
 def generate_doc_structure(translation_unit: TranslationUnit) -> DocStructure:

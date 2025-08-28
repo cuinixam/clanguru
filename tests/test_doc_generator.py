@@ -129,3 +129,36 @@ def test_generate_documentation(c_source_translation_unit: TranslationUnit, tmp_
     assert md_file.exists()
     md_content = md_file.read_text()
     assert "# test.c" in md_content
+
+
+def test_markdown_formatter_format_table() -> None:
+    formatter = MarkdownFormatter()
+    headers = ["Name", "Age"]
+    rows = [["Alice", "30"], ["Bob", "25"]]
+    table = formatter.format_table(headers, rows)
+    expected = dedent("""\
+    | Name | Age |
+    | --- | --- |
+    | Alice | 30 |
+    | Bob | 25 |
+    """)
+    assert table == expected
+
+
+def test_rst_formatter_format_table() -> None:
+    formatter = RSTFormatter()
+    headers = ["Name", "Age"]
+    rows = [["Alice", "30"], ["Bob", "25"], ["Very Very Long Name", "1000"]]
+    table = formatter.format_table(headers, rows)
+    expected = dedent("""\
+    +---------------------+------+
+    | Name                | Age  |
+    +=====================+======+
+    | Alice               | 30   |
+    +---------------------+------+
+    | Bob                 | 25   |
+    +---------------------+------+
+    | Very Very Long Name | 1000 |
+    +---------------------+------+
+    """)
+    assert table == expected
