@@ -12,6 +12,15 @@ from clanguru.compilation_options_manager import CompilationOptionsManager
 
 
 @dataclass
+class SourceCodeSnippet:
+    """Represents a source code snippet with line number information."""
+
+    content: str
+    start_line: int
+    end_line: int
+
+
+@dataclass
 class Token:
     raw_token: _Token
     previous_token: Optional["Token"]
@@ -96,7 +105,7 @@ T = TypeVar("T", bound="Declaration")
 
 
 class Declaration:
-    def __init__(self, name: str, origin: Node, description_token: Token | None, body: str):
+    def __init__(self, name: str, origin: Node, description_token: Token | None, body: SourceCodeSnippet):
         self.name = name
         self.origin = origin
         self.description_token = description_token
@@ -269,7 +278,7 @@ class CLangParser:
         return None
 
     @staticmethod
-    def get_node_source_code(node: Node) -> str:
+    def get_node_source_code(node: Node) -> SourceCodeSnippet:
         if not isinstance(node.raw_node, Cursor):
             raise ValueError(f"The node {node} is not a valid cursor")
 
@@ -307,7 +316,8 @@ class CLangParser:
         snippet = raw_bytes.decode("utf-8", errors="replace")
         # Normalise Windows newlines so documentation output is consistent.
         snippet = snippet.replace("\r\n", "\n")
-        return snippet
+
+        return SourceCodeSnippet(content=snippet, start_line=start.line, end_line=end.line)
 
     @staticmethod
     def get_comment_content(token: Token) -> str:

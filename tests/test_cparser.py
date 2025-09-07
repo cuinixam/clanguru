@@ -104,7 +104,7 @@ def test_parsing_function(tmp_path: Path) -> None:
             return x * 2;
         }""")
 
-    assert functions[0].body == expected_body
+    assert functions[0].body.content == expected_body
 
 
 def create_comment_token(comment: str) -> Token:

@@ -68,6 +68,7 @@ def test_markdown_formatter(c_source: TranslationUnit) -> None:
 
     ```{code-block} c
     :linenos:
+    :lineno-start: 2
 
     int test_function() {
         return 0;
@@ -81,6 +82,7 @@ def test_markdown_formatter(c_source: TranslationUnit) -> None:
 
     ```{code-block} c
     :linenos:
+    :lineno-start: 10
 
     void another_function(int arg) {
         if (arg > 0) {
@@ -112,6 +114,8 @@ def test_rst_formatter(c_source: TranslationUnit) -> None:
     This is a test function
 
     .. code-block:: c
+       :linenos:
+       :lineno-start: 2
 
         int test_function() {
             return 0;
@@ -125,6 +129,8 @@ def test_rst_formatter(c_source: TranslationUnit) -> None:
     function description
 
     .. code-block:: c
+       :linenos:
+       :lineno-start: 10
 
         void another_function(int arg) {
             if (arg > 0) {
@@ -232,7 +238,7 @@ def test_crlf_line_endings_function_body_extraction(tmp_path: Path) -> None:
     func_lf = {f.name: f for f in CLangParser.get_functions(tu_lf)}["sample"]
     func_crlf = {f.name: f for f in CLangParser.get_functions(tu_crlf)}["sample"]
 
-    assert func_lf.body == func_crlf.body == "int sample() {\n    int x = 1;\n    return x;\n}"
+    assert func_lf.body.content == func_crlf.body.content == "int sample() {\n    int x = 1;\n    return x;\n}"
 
 
 def test_markdown_formatter_format_table() -> None:

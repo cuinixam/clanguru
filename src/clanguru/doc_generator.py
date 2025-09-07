@@ -18,6 +18,7 @@ class CodeContent:
     language: str = "c"
     linenos: bool = True
     highlight_lines: list[int] | None = None
+    start_line: int | None = None
 
 
 SectionContent = Union[TextContent, CodeContent]
@@ -129,6 +130,7 @@ class MarkdownFormatter(OutputFormatter):
 
             ```{code-block} c
             :linenos:
+            :lineno-start: 5
             :emphasize-lines: 2,4
 
             int main() {}
@@ -137,6 +139,8 @@ class MarkdownFormatter(OutputFormatter):
         options: list[str] = []
         if content.linenos:
             options.append(":linenos:")
+        if content.start_line is not None:
+            options.append(f":lineno-start: {content.start_line}")
         if content.highlight_lines:
             # myst expects a comma separated list
             highlighted = ",".join(str(n) for n in content.highlight_lines)
@@ -186,7 +190,20 @@ class RSTFormatter(OutputFormatter):
         return text.strip()
 
     def format_code(self, content: CodeContent) -> str:
-        return f".. code-block:: {content.language}\n\n{self._indent_code(content.code)}\n"
+        options = []
+        if content.linenos:
+            options.append("   :linenos:")
+        if content.start_line is not None:
+            options.append(f"   :lineno-start: {content.start_line}")
+        if content.highlight_lines:
+            highlighted = ",".join(str(n) for n in content.highlight_lines)
+            options.append(f"   :emphasize-lines: {highlighted}")
+
+        options_str = "\n".join(options)
+        if options_str:
+            options_str = "\n" + options_str + "\n"
+
+        return f".. code-block:: {content.language}{options_str}\n{self._indent_code(content.code)}\n"
 
     def _indent_code(self, code: str) -> str:
         return "\n".join(f"    {line}" for line in code.split("\n"))
@@ -240,7 +257,7 @@ def generate_doc_structure(translation_unit: TranslationUnit) -> DocStructure:
                 func_section = Section(func.name)
                 if func.description_token:
                     func_section.add_content(TextContent(CLangParser.get_comment_content(func.description_token)))
-                func_section.add_content(CodeContent(func.body))
+                func_section.add_content(CodeContent(code=func.body.content, start_line=func.body.start_line))
                 functions_section.add_subsection(func_section)
     classes = CLangParser.get_classes(translation_unit)
     if classes:

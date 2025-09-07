@@ -1,4 +1,5 @@
 import sys
+from enum import Enum
 from pathlib import Path
 
 import typer
@@ -8,7 +9,7 @@ from py_app_dev.core.logging import logger, setup_logger, time_it
 from clanguru import __version__
 from clanguru.compilation_options_manager import CompilationDatabase, CompilationOptionsManager
 from clanguru.cparser import CLangParser
-from clanguru.doc_generator import MarkdownFormatter, generate_documentation
+from clanguru.doc_generator import MarkdownFlavour, MarkdownFormatter, OutputFormatter, RSTFormatter, generate_documentation
 from clanguru.mock_generator import MocksGenerator, MocksGeneratorConfig, MockType
 from clanguru.object_analyzer import NmExecutor, ObjectsDataExcelReportGenerator, ObjectsDependenciesReportGenerator, parse_objects
 
@@ -26,16 +27,32 @@ def version(
         raise typer.Exit()
 
 
+class DocsFormat(Enum):
+    myst = "myst"
+    md = "md"
+    rst = "rst"
+
+
 @app.command(help="Generate documentation for C/C++ source code.")
 @time_it("docs")
 def docs(
     source_file: Path = typer.Option(help="Input source file"),  # noqa: B008
     output_file: Path = typer.Option(help="Output file"),  # noqa: B008
     compilation_database: Path | None = typer.Option(None, help="Compilation database file required if the source file includes external headers."),  # noqa: B008
+    format: DocsFormat = typer.Option(  # noqa: B008
+        DocsFormat.myst,
+        case_sensitive=False,
+        help="Output documentation format. Supported: Myst Markdown flavour (default), Markdown, RestructuredText.",
+    ),
 ) -> None:
     parser = CLangParser()
     translation_unit = parser.load(source_file, CompilationOptionsManager(compilation_database))
-    generate_documentation(translation_unit, MarkdownFormatter(), output_file)
+    formatter: OutputFormatter
+    if format == DocsFormat.rst:
+        formatter = RSTFormatter()
+    else:
+        formatter = MarkdownFormatter(MarkdownFlavour.Myst if format == DocsFormat.myst else MarkdownFlavour.Raw)
+    generate_documentation(translation_unit, formatter, output_file)
 
 
 @app.command(help="Generate mocks for C functions and variables.")
