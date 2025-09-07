@@ -335,6 +335,8 @@ class CLangParser:
             return ""
 
         content = token.raw_token.spelling.strip()
+        # Normalize Windows newlines to ensure consistent output
+        content = content.replace("\r\n", "\n")
 
         # Single-line comment
         if content.startswith("//"):
