@@ -289,10 +289,25 @@ class CLangParser:
         if source_file is None or not source_file.name:
             raise ValueError(f"The source file is not available for node {node}")
 
-        # Read the relevant part of the source file
-        with open(source_file.name) as f:
+        # Read the relevant part of the source file.
+        # IMPORTANT: Offsets provided by libclang refer to raw byte offsets in the
+        # original file. When a file uses Windows CRLF line endings, opening the
+        # file in text mode with universal newline translation will collapse each
+        # '\r\n' pair into a single '\n' character. This causes the Python file
+        # object's text cursor (after f.seek) to point to the wrong logical
+        # location relative to libclang's byte offsets, resulting in truncated or
+        # malformed extracted source (e.g. missing function bodies or stray
+        # comment fragments). To avoid this, read the file in *binary* mode, slice
+        # the exact byte range, then decode & normalize newlines for downstream
+        # processing.
+        with open(source_file.name, "rb") as f:
             f.seek(start.offset)
-            return f.read(end.offset - start.offset)
+            raw_bytes = f.read(end.offset - start.offset)
+        # Decode (assume UTF-8; replace errors to avoid hard failure on unusual bytes)
+        snippet = raw_bytes.decode("utf-8", errors="replace")
+        # Normalise Windows newlines so documentation output is consistent.
+        snippet = snippet.replace("\r\n", "\n")
+        return snippet
 
     @staticmethod
     def get_comment_content(token: Token) -> str:

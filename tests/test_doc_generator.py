@@ -208,6 +208,33 @@ def test_generate_documentation(c_source: TranslationUnit, tmp_path: Path) -> No
     assert "# test.c" in md_content
 
 
+def test_crlf_line_endings_function_body_extraction(tmp_path: Path) -> None:
+    """
+    Regression test: ensure CRLF line endings don't truncate function bodies.
+
+    We create two identical source files differing only by newline style (LF vs CRLF)
+    and confirm the extracted function bodies are identical.
+    """
+    lf_content = """// Comment about function\nint sample() {\n    int x = 1;\n    return x;\n}\n"""
+    crlf_content = lf_content.replace("\n", "\r\n")
+
+    lf_file = tmp_path / "sample_lf.c"
+    crlf_file = tmp_path / "sample_crlf.c"
+
+    # Write explicit newline styles
+    lf_file.write_bytes(lf_content.encode("utf-8"))
+    crlf_file.write_bytes(crlf_content.encode("utf-8"))
+
+    parser = CLangParser()
+    tu_lf = parser.load(lf_file)
+    tu_crlf = parser.load(crlf_file)
+
+    func_lf = {f.name: f for f in CLangParser.get_functions(tu_lf)}["sample"]
+    func_crlf = {f.name: f for f in CLangParser.get_functions(tu_crlf)}["sample"]
+
+    assert func_lf.body == func_crlf.body == "int sample() {\n    int x = 1;\n    return x;\n}"
+
+
 def test_markdown_formatter_format_table() -> None:
     formatter = MarkdownFormatter()
     headers = ["Name", "Age"]
