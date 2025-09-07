@@ -26,9 +26,9 @@ def version(
         raise typer.Exit()
 
 
-@app.command(help="Generate documentation from C source code.")
-@time_it("generate")
-def generate(
+@app.command(help="Generate documentation for C/C++ source code.")
+@time_it("docs")
+def docs(
     source_file: Path = typer.Option(help="Input source file"),  # noqa: B008
     output_file: Path = typer.Option(help="Output file"),  # noqa: B008
     compilation_database: Path | None = typer.Option(None, help="Compilation database file required if the source file includes external headers."),  # noqa: B008

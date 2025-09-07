@@ -4,11 +4,21 @@ from textwrap import dedent
 import pytest
 
 from clanguru.cparser import CLangParser, TranslationUnit
-from clanguru.doc_generator import MarkdownFormatter, RSTFormatter, generate_doc_structure, generate_documentation
+from clanguru.doc_generator import (
+    CodeContent,
+    MarkdownFlavour,
+    MarkdownFormatter,
+    RSTFormatter,
+    Section,
+    TextContent,
+    generate_doc_structure,
+    generate_documentation,
+)
+from tests.conftest import assert_element_of_type
 
 
 @pytest.fixture
-def c_source_translation_unit(tmp_path: Path) -> TranslationUnit:
+def c_source(tmp_path: Path) -> TranslationUnit:
     file_content = dedent("""\
     // This is a test function
     int test_function() {
@@ -30,20 +40,21 @@ def c_source_translation_unit(tmp_path: Path) -> TranslationUnit:
     return CLangParser().load(file_path)
 
 
-def test_doc_generator_generate_doc_structure(c_source_translation_unit: TranslationUnit) -> None:
-    doc_structure = generate_doc_structure(c_source_translation_unit)
+def test_doc_generator_generate_doc_structure(c_source: TranslationUnit) -> None:
+    doc_structure = generate_doc_structure(c_source)
     assert doc_structure.title == "test.c"
     assert len(doc_structure.sections) == 1
     functions_section = doc_structure.sections[0]
     assert functions_section.title == "Functions"
-    assert len(functions_section.subsections) == 2
-    assert functions_section.subsections[0].title == "test_function"
-    assert functions_section.subsections[1].title == "another_function"
+    assert {section.title for section in functions_section.subsections} == {
+        "test_function",
+        "another_function",
+    }
 
 
-def test_markdown_formatter(c_source_translation_unit: TranslationUnit) -> None:
-    doc_structure = generate_doc_structure(c_source_translation_unit)
-    formatter = MarkdownFormatter()
+def test_markdown_formatter(c_source: TranslationUnit) -> None:
+    doc_structure = generate_doc_structure(c_source)
+    formatter = MarkdownFormatter(MarkdownFlavour.Myst)
     output = formatter.format(doc_structure)
 
     expected_output = dedent("""\
@@ -55,7 +66,9 @@ def test_markdown_formatter(c_source_translation_unit: TranslationUnit) -> None:
 
     This is a test function
 
-    ```c
+    ```{code-block} c
+    :linenos:
+
     int test_function() {
         return 0;
     }
@@ -66,7 +79,9 @@ def test_markdown_formatter(c_source_translation_unit: TranslationUnit) -> None:
     This is a multi-line
     function description
 
-    ```c
+    ```{code-block} c
+    :linenos:
+
     void another_function(int arg) {
         if (arg > 0) {
             // Do something
@@ -79,8 +94,8 @@ def test_markdown_formatter(c_source_translation_unit: TranslationUnit) -> None:
     assert formatter.file_extension() == "md"
 
 
-def test_rst_formatter(c_source_translation_unit: TranslationUnit) -> None:
-    doc_structure = generate_doc_structure(c_source_translation_unit)
+def test_rst_formatter(c_source: TranslationUnit) -> None:
+    doc_structure = generate_doc_structure(c_source)
     formatter = RSTFormatter()
     output = formatter.format(doc_structure)
 
@@ -122,10 +137,72 @@ def test_rst_formatter(c_source_translation_unit: TranslationUnit) -> None:
     assert formatter.file_extension() == "rst"
 
 
-def test_generate_documentation(c_source_translation_unit: TranslationUnit, tmp_path: Path) -> None:
+@pytest.fixture
+def c_source_with_traceability(tmp_path: Path) -> TranslationUnit:
+    file_content = dedent("""\
+// This is a test function
+#define ENABLE_FEATURE 1
+
+#if ENABLE_FEATURE
+/**
+* @rst
+* .. impl:: Function with Traceability
+*    :id: SWIMPL_FT-001
+*    :implements: SWDD_FT-101
+* @endrst
+*/
+STATIC float function_with_traceability(int a, int b) {
+    float result = 0;
+    if (a > 0) {
+        result = a + b;
+    }
+    else {
+        result = b;
+    }
+    return result;
+}
+#endif
+
+// Just some comment
+""")
+    file_path = tmp_path / "test.c"
+    file_path.write_text(file_content, newline="\n")
+    return CLangParser().load(file_path)
+
+
+def test_doc_structure_with_traceability(c_source_with_traceability: TranslationUnit) -> None:
+    doc_structure = generate_doc_structure(c_source_with_traceability)
+    assert doc_structure.title == "test.c"
+    assert len(doc_structure.sections) == 1
+    functions_section = doc_structure.sections[0]
+    assert functions_section.title == "Functions"
+    section = assert_element_of_type(functions_section.subsections, Section)
+    assert section.title == "function_with_traceability"
+    section_text = assert_element_of_type(section.content, TextContent)
+    assert section_text.text == dedent("""\
+        @rst
+        .. impl:: Function with Traceability
+           :id: SWIMPL_FT-001
+           :implements: SWDD_FT-101
+        @endrst""")
+    section_code = assert_element_of_type(section.content, CodeContent)
+    assert section_code.code == dedent("""\
+        STATIC float function_with_traceability(int a, int b) {
+            float result = 0;
+            if (a > 0) {
+                result = a + b;
+            }
+            else {
+                result = b;
+            }
+            return result;
+        }""")
+
+
+def test_generate_documentation(c_source: TranslationUnit, tmp_path: Path) -> None:
     # Generate Markdown documentation
     md_file = tmp_path / "test.md"
-    generate_documentation(c_source_translation_unit, formatter=MarkdownFormatter(), output_file=md_file)
+    generate_documentation(c_source, formatter=MarkdownFormatter(), output_file=md_file)
     assert md_file.exists()
     md_content = md_file.read_text()
     assert "# test.c" in md_content

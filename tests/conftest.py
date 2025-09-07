@@ -1,11 +1,8 @@
 from typing import Any, Callable, Optional, TypeVar
 
+from py_app_dev.core.find import find_elements_of_type
+
 T = TypeVar("T")
-
-
-def find_elements_of_type(elements: list[Any], element_type: type[T]) -> list[T]:
-    """Find all elements of a specific type."""
-    return [elem for elem in elements if isinstance(elem, element_type)]
 
 
 def _assert_elements(elements: list[Any], element_type: type[T], expected_count: int, filter_fn: Optional[Callable[[T], bool]] = None) -> list[T]:

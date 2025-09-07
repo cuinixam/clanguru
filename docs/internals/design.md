@@ -113,24 +113,27 @@ classDiagram
     class CodeContent {
         +code: str
         +language: str
+        +linenos: bool
+        +highlight_lines: List[int]
     }
     class OutputFormatter {
         <<abstract>>
         +format(doc: DocStructure) str
         +format_text(text: str) str
-        +format_code(code: str, language: str) str
+        +format_code(content: CodeContent) str
         +file_extension() str
     }
     class MarkdownFormatter {
+        +flavour: MarkdownFlavour
         +format(doc: DocStructure) str
         +format_text(text: str) str
-        +format_code(code: str, language: str) str
+        +format_code(content: CodeContent) str
         +file_extension() str
     }
     class RSTFormatter {
         +format(doc: DocStructure) str
         +format_text(text: str) str
-        +format_code(code: str, language: str) str
+        +format_code(content: CodeContent) str
         +file_extension() str
     }
 

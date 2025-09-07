@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Union
 
@@ -15,6 +16,8 @@ class TextContent:
 class CodeContent:
     code: str
     language: str = "c"
+    linenos: bool = True
+    highlight_lines: list[int] | None = None
 
 
 SectionContent = Union[TextContent, CodeContent]
@@ -58,7 +61,7 @@ class OutputFormatter(ABC):
         pass
 
     @abstractmethod
-    def format_code(self, code: str, language: str) -> str:
+    def format_code(self, content: CodeContent) -> str:
         """Format a code block."""
         pass
 
@@ -73,8 +76,23 @@ class OutputFormatter(ABC):
         pass
 
 
+class MarkdownFlavour(Enum):
+    Myst = "myst"
+    Raw = "raw"
+
+
 class MarkdownFormatter(OutputFormatter):
-    """Markdown output formatter for documentation."""
+    """
+    Markdown output formatter for documentation.
+
+    Two flavours are supported:
+    * Raw: plain GitHub style fenced code blocks.
+    * Myst: MystParser extended ``code-block`` directive with options (linenos & highlight lines).
+    """
+
+    def __init__(self, flavour: MarkdownFlavour = MarkdownFlavour.Raw) -> None:
+        super().__init__()
+        self.flavour = flavour
 
     def format(self, doc: DocStructure) -> str:
         output = f"# {doc.title}\n\n"
@@ -88,7 +106,7 @@ class MarkdownFormatter(OutputFormatter):
             if isinstance(content, TextContent):
                 output += self.format_text(content.text) + "\n\n"
             elif isinstance(content, CodeContent):
-                output += self.format_code(content.code, content.language) + "\n\n"
+                output += self.format_code(content) + "\n\n"
         for subsection in section.subsections:
             output += self._format_section(subsection, level + 1)
         return output
@@ -96,8 +114,42 @@ class MarkdownFormatter(OutputFormatter):
     def format_text(self, text: str) -> str:
         return text.strip()
 
-    def format_code(self, code: str, language: str) -> str:
-        return f"```{language}\n{code}\n```"
+    def format_code(self, content: CodeContent) -> str:
+        if self.flavour is MarkdownFlavour.Myst:
+            return self.format_code_block_myst(content)
+        else:
+            # Raw flavour - classic fenced block
+            return f"```{content.language}\n{content.code}\n```"
+
+    def format_code_block_myst(self, content: CodeContent) -> str:
+        """
+        Return a fenced code block or Myst code-block directive.
+
+        Myst format example::
+
+            ```{code-block} c
+            :linenos:
+            :emphasize-lines: 2,4
+
+            int main() {}
+            ```
+        """
+        options: list[str] = []
+        if content.linenos:
+            options.append(":linenos:")
+        if content.highlight_lines:
+            # myst expects a comma separated list
+            highlighted = ",".join(str(n) for n in content.highlight_lines)
+            options.append(f":emphasize-lines: {highlighted}")
+        # Build directive header
+        header = f"```{{code-block}} {content.language}".rstrip()
+        body_parts = [header]
+        body_parts.extend(options)
+        # Blank line separating options from code per myst recommendations
+        body_parts.append("")
+        body_parts.append(content.code)
+        body_parts.append("```")
+        return "\n".join(body_parts)
 
     def format_table(self, headers: list[str], rows: list[list[str]]) -> str:
         header_line = "| " + " | ".join(headers) + " |"
@@ -125,7 +177,7 @@ class RSTFormatter(OutputFormatter):
             if isinstance(content, TextContent):
                 output += self.format_text(content.text) + "\n\n"
             elif isinstance(content, CodeContent):
-                output += self.format_code(content.code, content.language) + "\n\n"
+                output += self.format_code(content) + "\n\n"
         for subsection in section.subsections:
             output += self._format_section(subsection, level + 1)
         return output
@@ -133,8 +185,8 @@ class RSTFormatter(OutputFormatter):
     def format_text(self, text: str) -> str:
         return text.strip()
 
-    def format_code(self, code: str, language: str) -> str:
-        return f".. code-block:: {language}\n\n{self._indent_code(code)}\n"
+    def format_code(self, content: CodeContent) -> str:
+        return f".. code-block:: {content.language}\n\n{self._indent_code(content.code)}\n"
 
     def _indent_code(self, code: str) -> str:
         return "\n".join(f"    {line}" for line in code.split("\n"))
