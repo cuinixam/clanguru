@@ -25,6 +25,7 @@ def temp_compilation_database(tmp_path: Path) -> Generator[Path, None, None]:
 
 def test_compilation_options_manager_without_database() -> None:
     manager = CompilationOptionsManager()
+    manager.set_default_options(["-std=c11"])
     assert manager.get_compile_options(Path("any_file.c")) == ["-std=c11"]
 
 
@@ -44,7 +45,7 @@ def test_compilation_options_manager_with_database(temp_compilation_database: Pa
     # Test for file not in the database
     not_in_db_path = Path(temp_compilation_database.parent) / "not_in_db.c"
     options = manager.get_compile_options(not_in_db_path)
-    assert options == ["-std=c11"]
+    assert options == []
 
 
 def test_compilation_options_manager_no_default() -> None:

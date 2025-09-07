@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, TypeVar
 
-from clang.cindex import Cursor, CursorKind, Index, SourceRange
+from clang.cindex import Cursor, CursorKind, Index, SourceRange, TranslationUnitLoadError
 from clang.cindex import Token as _Token
 from clang.cindex import TranslationUnit as _TranslationUnit
+from py_app_dev.core.exceptions import UserNotificationException
 
 from clanguru.compilation_options_manager import CompilationOptionsManager
 
@@ -196,7 +197,10 @@ class CLangParser:
 
     def load(self, file: Path, compilation_options_manager: CompilationOptionsManager | None = None) -> TranslationUnit:
         args = compilation_options_manager.get_compile_options(file) if compilation_options_manager else []
-        translation_unit = TranslationUnit(raw_tu=self.index.parse(str(file), args=args), tokens=TokensCollection([]), nodes=[])
+        try:
+            translation_unit = TranslationUnit(raw_tu=self.index.parse(str(file), args=args), tokens=TokensCollection([]), nodes=[])
+        except TranslationUnitLoadError:
+            raise UserNotificationException(f"Could not parse source file {file} with arguments {args}. Check CLangParser options.") from None
         translation_unit.tokens = self._extract_tokens(translation_unit.raw_tu.cursor)
         translation_unit.nodes = self._extract_nodes(translation_unit)
         return translation_unit

@@ -124,7 +124,7 @@ class CompilationOptionsManager:
     def __init__(self, compilation_database: Path | None = None, no_default: bool = False):
         self.compilation_database: CompilationDatabase | None = CompilationDatabase.from_json_file(compilation_database) if compilation_database else None
         self.no_default = no_default
-        self.default_options = ["-std=c11"]
+        self.default_options: list[str] = []
 
     def get_compile_options(self, file: Path) -> list[str]:
         if self.compilation_database:
