@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Callable, Optional, TypeVar
 
 from py_app_dev.core.find import find_elements_of_type
@@ -29,3 +30,14 @@ def assert_element_of_type(elements: list[Any], element_type: type[T], filter_fn
 def assert_elements_of_type(elements: list[Any], element_type: type[T], count: int, filter_fn: Optional[Callable[[T], bool]] = None) -> list[T]:
     """Assert that exactly `count` elements of the given type exist, optionally needs to meet filter condition."""
     return _assert_elements(elements, element_type, count, filter_fn)
+
+
+def get_test_data_dir() -> Path:
+    """Get the path to the test data directory."""
+    current_dir = Path(__file__).parent
+    return current_dir / "data"
+
+
+def get_test_data_file(filename: str | Path) -> Path:
+    """Get the path to a specific test data file."""
+    return get_test_data_dir() / filename

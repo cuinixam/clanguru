@@ -267,12 +267,21 @@ class CLangParser:
         Get the description comment for a node.
 
         This method searches for a comment token immediately preceding the node's first token,
-        but on a different line. If found, it returns the comment token, otherwise None.
+        but on a different line and from the same file as the original node. If found, it returns the comment token, otherwise None.
         """
+        # Get the file where the node is actually declared
+        node_file = node.raw_node.location.file
+        if node_file is None:
+            return None
+
         if first_token := node.tokens.first():
             current_token = first_token
             while current_token.previous_token:
                 prev_token = current_token.previous_token
+                # Check that the comment token is from the same file as the original node
+                if prev_token.raw_token.location.file is None or prev_token.raw_token.location.file.name != node_file.name:
+                    current_token = prev_token
+                    continue
                 if prev_token.raw_token.location.line < current_token.raw_token.location.line:
                     if prev_token.is_comment:
                         return prev_token

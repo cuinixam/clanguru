@@ -1,3 +1,4 @@
+import textwrap
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from textwrap import dedent
@@ -6,6 +7,7 @@ import pytest
 
 from clanguru.compilation_options_manager import CompilationOptionsManager
 from clanguru.cparser import CLangParser, Token
+from tests.conftest import get_test_data_file
 
 
 @pytest.fixture
@@ -263,3 +265,22 @@ def test_parsing_variables(tmp_path: Path) -> None:
     assert variables[0].get_init_value() == "0"
     assert variables[1].get_init_value() == "13"
     assert variables[2].get_init_value() == "my_var1"
+
+
+def test_parsing_gtest_tests() -> None:
+    file = get_test_data_file("test_gtest.cc")
+    options_manager = CompilationOptionsManager()
+    options_manager.set_default_options([f"-I{file.parent}"])
+    tu = CLangParser().load(file, options_manager)
+    classes = CLangParser.get_classes(tu)
+    assert len(classes) == 2
+    assert {func.name for func in classes} == {"MyMock", "power_signal_processing_test_power_stays_off"}
+    my_mock = next(c for c in classes if c.name == "MyMock")
+    assert my_mock.description is None
+    my_test = next(c for c in classes if c.name == "power_signal_processing_test_power_stays_off")
+    assert my_test.description == textwrap.dedent("""\
+        ```{test} power_signal_processing.test_power_stays_off
+           :id: TS_PSP-001
+           :tests: SWDD_PSP-001
+
+        ```""")
