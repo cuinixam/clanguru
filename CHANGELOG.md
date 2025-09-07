@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.11.0 (2025-09-07)
+
+### Features
+
+- Get code block location in source file
+  ([`53541e9`](https://github.com/cuinixam/clanguru/commit/53541e9bb4bf4927d6b2aed82ca2d938930bc62f))
+
+
 ## v0.10.0 (2025-09-07)
 
 ### Bug Fixes
