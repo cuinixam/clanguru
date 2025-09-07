@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.12.2 (2025-09-07)
+
+### Bug Fixes
+
+- Wrong comment allocated to class declaration
+  ([`23b9532`](https://github.com/cuinixam/clanguru/commit/23b9532f25f4f13f48aa0674bef58365fdd04f6f))
+
+
 ## v0.12.1 (2025-09-07)
 
 ### Bug Fixes
