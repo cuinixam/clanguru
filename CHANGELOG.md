@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.12.1 (2025-09-07)
+
+### Bug Fixes
+
+- Comments are not correct if the source has windows newlines
+  ([`0fd676f`](https://github.com/cuinixam/clanguru/commit/0fd676fc07ea149b86c3de2ca87472af815df3a0))
+
+
 ## v0.12.0 (2025-09-07)
 
 ### Features
