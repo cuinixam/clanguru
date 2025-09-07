@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.10.0 (2025-09-07)
+
+### Bug Fixes
+
+- Function bodies are not correct if the source has windows newlines
+  ([`31b4eb2`](https://github.com/cuinixam/clanguru/commit/31b4eb2176a4166e09ef3cf1ef008820890a51f0))
+
+### Features
+
+- Rename docs command and support myst markdown formatter
+  ([`7b1b4ab`](https://github.com/cuinixam/clanguru/commit/7b1b4abe0be46acd8fe7dad120565cb74b4de742))
+
+
 ## v0.9.0 (2025-08-28)
 
 ### Features
