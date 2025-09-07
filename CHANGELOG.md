@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.12.0 (2025-09-07)
+
+### Features
+
+- Show error message when file can not be parsed
+  ([`970efbf`](https://github.com/cuinixam/clanguru/commit/970efbf75afb4e98ae92d2f5589d007289c8fd7b))
+
+
 ## v0.11.0 (2025-09-07)
 
 ### Features
