@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.12.3 (2025-09-12)
+
+### Bug Fixes
+
+- No code block generated for classes sections
+  ([`e992f26`](https://github.com/cuinixam/clanguru/commit/e992f2687f1fc84d312f1a0cf82ff27e1ba98802))
+
+
 ## v0.12.2 (2025-09-07)
 
 ### Bug Fixes
