@@ -1,3 +1,4 @@
+import textwrap
 from pathlib import Path
 from textwrap import dedent
 
@@ -14,7 +15,7 @@ from clanguru.doc_generator import (
     generate_doc_structure,
     generate_documentation,
 )
-from tests.conftest import assert_element_of_type
+from tests.conftest import assert_element_of_type, assert_elements_of_type, get_test_data_file
 
 
 @pytest.fixture
@@ -203,6 +204,32 @@ def test_doc_structure_with_traceability(c_source_with_traceability: Translation
             }
             return result;
         }""")
+
+
+def test_doc_structure_for_gtest_files() -> None:
+    doc_structure = generate_doc_structure(CLangParser().load(get_test_data_file("test_gtest.cc")))
+    assert len(doc_structure.sections) == 1
+    classes_section = doc_structure.sections[0]
+    assert classes_section.title == "Classes"
+    sections = assert_elements_of_type(classes_section.subsections, Section, 2)
+    assert {section.title for section in sections} == {"MyMock", "power_signal_processing_test_power_stays_off"}
+    test_section = assert_element_of_type(classes_section.subsections, Section, lambda s: s.title == "power_signal_processing_test_power_stays_off")
+
+    # Check that we have both text content (description) and code content
+    text_content = assert_element_of_type(test_section.content, TextContent)
+    code_content = assert_element_of_type(test_section.content, CodeContent)
+
+    # Verify the text content contains the test directive
+    assert text_content.text == textwrap.dedent("""\
+        ```{test} power_signal_processing.test_power_stays_off
+           :id: TS_PSP-001
+           :tests: SWDD_PSP-001
+
+        ```""")
+
+    # Verify the code content contains the test declaration
+    assert code_content.code == "TEST(power_signal_processing, test_power_stays_off)"
+    assert code_content.start_line == 29
 
 
 def test_generate_documentation(c_source: TranslationUnit, tmp_path: Path) -> None:

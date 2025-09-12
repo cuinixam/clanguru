@@ -284,3 +284,6 @@ def test_parsing_gtest_tests() -> None:
            :tests: SWDD_PSP-001
 
         ```""")
+    assert my_test.body.content == "TEST(power_signal_processing, test_power_stays_off)"
+    assert my_test.body.start_line == 29
+    assert my_test.body.end_line == 29

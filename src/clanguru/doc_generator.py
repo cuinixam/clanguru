@@ -268,6 +268,7 @@ def generate_doc_structure(translation_unit: TranslationUnit) -> DocStructure:
             cls_section = Section(cls.name)
             if cls.description_token:
                 cls_section.add_content(TextContent(CLangParser.get_comment_content(cls.description_token)))
+            cls_section.add_content(CodeContent(code=cls.body.content, start_line=cls.body.start_line))
             classes_section.add_subsection(cls_section)
 
     return doc
