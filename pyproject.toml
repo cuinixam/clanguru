@@ -29,9 +29,9 @@ dependencies = [
   "jinja2>=3.1,<4",
   "pyyaml>=6,<7",
 ]
-urls."Bug Tracker" = "https://github.com/cuinixam/hello-marimo/issues"
-urls.Changelog = "https://github.com/cuinixam/hello-marimo/blob/main/CHANGELOG.md"
-urls.repository = "https://github.com/cuinixam/hello-marimo"
+urls."Bug Tracker" = "https://github.com/cuinixam/clanguru/issues"
+urls.Changelog = "https://github.com/cuinixam/clanguru/blob/main/CHANGELOG.md"
+urls.repository = "https://github.com/cuinixam/clanguru"
 
 [project.scripts]
 clanguru = "clanguru.main:main"
