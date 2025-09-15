@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.12.4 (2025-09-15)
+
+### Bug Fixes
+
+- Pyyaml dependency is missing
+  ([`2111a97`](https://github.com/cuinixam/clanguru/commit/2111a970d894b3303fdd338d966a47f0f179cbd3))
+
+fixes #1
+
+
 ## v0.12.3 (2025-09-12)
 
 ### Bug Fixes
