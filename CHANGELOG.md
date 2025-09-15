@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.12.5 (2025-09-15)
+
+### Bug Fixes
+
+- Links in pypi are wrong
+  ([`4f962df`](https://github.com/cuinixam/clanguru/commit/4f962df315e212d087c1c0877a5d5cf1d72733e4))
+
+
 ## v0.12.4 (2025-09-15)
 
 ### Bug Fixes
