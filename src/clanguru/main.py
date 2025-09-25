@@ -127,6 +127,7 @@ def analyze(
     compilation_database: Path = typer.Option(help="Compilation database file"),  # noqa: B008
     output_file: Path = typer.Option(help="Output file"),  # noqa: B008
     use_parent_deps: bool = typer.Option(False, help="Use parent dependencies."),
+    create_traceability_matrix: bool = typer.Option(False, help="Create object dependencies traceability matrix."),
 ) -> None:
     object_files = CompilationDatabase.from_json_file(compilation_database).get_output_files()
     if not object_files:
@@ -134,7 +135,7 @@ def analyze(
     object_data = parse_objects(object_files)
     # If the file extension is .xls or .xlsx use the ObjectsDataExcelReportGenerator generator.
     if output_file.suffix == ".xlsx":
-        ObjectsDataExcelReportGenerator(object_data, use_parent_deps=use_parent_deps).generate_report(output_file)
+        ObjectsDataExcelReportGenerator(object_data, use_parent_deps=use_parent_deps, create_traceability_matrix=create_traceability_matrix).generate_report(output_file)
         logger.info("Dependencies report generated in Excel format.")
     else:
         ObjectsDependenciesReportGenerator(object_data, use_parent_deps=use_parent_deps).generate_report(output_file)

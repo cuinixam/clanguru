@@ -36,7 +36,7 @@ def test_excel_report_generator(tmp_path: Path) -> None:
     ]
 
     # Create the report generator
-    generator = ObjectsDataExcelReportGenerator([obj1, obj2, obj3])
+    generator = ObjectsDataExcelReportGenerator([obj1, obj2, obj3], create_traceability_matrix=True)
 
     # Generate the Excel report
     output_file = tmp_path / "objects_report.xlsx"

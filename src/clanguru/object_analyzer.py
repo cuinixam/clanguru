@@ -356,15 +356,22 @@ class ExcelColumnMapper:
 class ObjectsDataExcelReportGenerator:
     """Excel report generator for object data with dependency analysis."""
 
-    def __init__(self, object_data: list[ObjectData], use_parent_deps: bool = False) -> None:
+    def __init__(
+        self,
+        object_data: list[ObjectData],
+        use_parent_deps: bool = False,
+        create_traceability_matrix: bool = False,
+    ) -> None:
         self.object_data = object_data
         self.use_parent_deps = use_parent_deps
+        self.create_traceability_matrix = create_traceability_matrix
         self.columns = ExcelColumnMapper()
 
     def generate_report(self, output_file: Path) -> None:
         wb = Workbook()
         self._create_objects_sheet(wb)
-        self._create_dependency_matrix_sheet(wb)
+        if self.create_traceability_matrix:
+            self._create_dependency_matrix_sheet(wb)
         wb.save(output_file)
 
     def _create_objects_sheet(self, wb: Workbook) -> None:
