@@ -1,3 +1,4 @@
+import fnmatch
 import os
 import re
 import subprocess
@@ -94,6 +95,57 @@ def parse_objects(obj_files: list[Path], max_workers: Optional[int] = None) -> l
         results = list(pool.map(NmExecutor.run, obj_files))
 
     return results
+
+
+def filter_object_data_symbols(object_data: list[ObjectData], exclude_patterns: list[str] | None) -> list[ObjectData]:
+    """
+    Filter object symbols by glob patterns returning fresh ``ObjectData`` instances.
+
+    The original ``object_data`` collection is left untouched to avoid stale
+    ``cached_property`` values (``required_symbols`` / ``provided_symbols``). By
+    reconstructing each ``ObjectData`` we ensure those sets are recomputed from
+    the filtered symbol list.
+
+    Args:
+        object_data: Parsed object data instances.
+        exclude_patterns: Glob (``fnmatch``) patterns for symbols to remove. ``None``
+            or an empty list -> no filtering.
+
+    Returns:
+        New list with symbols whose names do not match any exclusion pattern.
+
+    """
+    if not exclude_patterns:
+        return object_data
+
+    filtered: list[ObjectData] = []
+    for obj in object_data:
+        kept_symbols = [s for s in obj.symbols if not any(fnmatch.fnmatch(s.name, pat) for pat in exclude_patterns)]
+        # Recreate ObjectData to avoid stale cached_property values
+        filtered.append(ObjectData(path=obj.path, symbols=kept_symbols))
+    return filtered
+
+
+def filter_external_symbols_only(object_data: list[ObjectData]) -> list[ObjectData]:
+    """
+    Filter object data to keep only symbols with external linkage (EXTERN).
+
+    For dependency analysis, we typically only care about external interfaces
+    and dependencies, not internal implementation details (LOCAL symbols).
+
+    Args:
+        object_data: Parsed object data instances.
+
+    Returns:
+        New list with only symbols that have external linkage (SymbolLinkage.EXTERN).
+
+    """
+    filtered: list[ObjectData] = []
+    for obj in object_data:
+        extern_symbols = [s for s in obj.symbols if s.linkage == SymbolLinkage.EXTERN]
+        # Recreate ObjectData to avoid stale cached_property values
+        filtered.append(ObjectData(path=obj.path, symbols=extern_symbols))
+    return filtered
 
 
 @dataclass

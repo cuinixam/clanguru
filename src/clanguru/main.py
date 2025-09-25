@@ -11,7 +11,15 @@ from clanguru.compilation_options_manager import CompilationDatabase, Compilatio
 from clanguru.cparser import CLangParser
 from clanguru.doc_generator import MarkdownFlavour, MarkdownFormatter, OutputFormatter, RSTFormatter, generate_documentation
 from clanguru.mock_generator import MocksGenerator, MocksGeneratorConfig, MockType
-from clanguru.object_analyzer import NmExecutor, ObjectsDataExcelReportGenerator, ObjectsDependenciesReportGenerator, parse_objects
+from clanguru.object_analyzer import (
+    NmExecutor,
+    ObjectData,
+    ObjectsDataExcelReportGenerator,
+    ObjectsDependenciesReportGenerator,
+    SymbolLinkage,
+    filter_object_data_symbols,
+    parse_objects,
+)
 
 package_name = "clanguru"
 
@@ -121,6 +129,23 @@ def parse(
         logger.info(translation_unit)
 
 
+def print_objects_data_statistics(object_data: list[ObjectData]) -> None:
+    number_of_objects = len(object_data)
+    number_of_local_symbols = 0
+    number_of_external_symbols = 0
+
+    for obj in object_data:
+        for symbol in obj.symbols:
+            if symbol.linkage == SymbolLinkage.LOCAL:
+                number_of_local_symbols += 1
+            elif symbol.linkage == SymbolLinkage.EXTERN:
+                number_of_external_symbols += 1
+
+    logger.info(f"Number of objects: {number_of_objects}")
+    logger.info(f"Number of local symbols: {number_of_local_symbols}")
+    logger.info(f"Number of external symbols: {number_of_external_symbols}")
+
+
 @app.command(help="Analyze object files dependencies.")
 @time_it("analyze")
 def analyze(
@@ -128,11 +153,21 @@ def analyze(
     output_file: Path = typer.Option(help="Output file"),  # noqa: B008
     use_parent_deps: bool = typer.Option(False, help="Use parent dependencies."),
     create_traceability_matrix: bool = typer.Option(False, help="Create object dependencies traceability matrix."),
+    exclude_symbol_pattern: list[str] = typer.Option(None, help="Symbol patterns to exclude from analysis (glob). Can be used multiple times."),  # noqa: B008
 ) -> None:
     object_files = CompilationDatabase.from_json_file(compilation_database).get_output_files()
     if not object_files:
         raise UserNotificationException("No object files found in the compilation database.")
+    logger.info("Parse objects files")
     object_data = parse_objects(object_files)
+    print_objects_data_statistics(object_data)
+
+    # Apply additional user-specified exclude patterns if provided
+    if exclude_symbol_pattern:
+        logger.info("Exclude symbols matching patterns")
+        object_data = filter_object_data_symbols(object_data, exclude_symbol_pattern)
+        print_objects_data_statistics(object_data)
+
     # If the file extension is .xls or .xlsx use the ObjectsDataExcelReportGenerator generator.
     if output_file.suffix == ".xlsx":
         ObjectsDataExcelReportGenerator(object_data, use_parent_deps=use_parent_deps, create_traceability_matrix=create_traceability_matrix).generate_report(output_file)

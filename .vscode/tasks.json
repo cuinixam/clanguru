@@ -3,9 +3,9 @@
   "tasks": [
     {
       "label": "run tests",
-      "command": ".venv/bin/pypeline run --step PyTest --single",
+      "command": ".venv/bin/pypeline run --step CreateVEnv --step PyTest --single",
       "windows": {
-        "command": ".venv/Scripts/pypeline run --step PyTest --single"
+        "command": ".venv/Scripts/pypeline run --step CreateVEnv --step PyTest --single"
       },
       "type": "shell",
       "presentation": {
@@ -18,9 +18,9 @@
     },
     {
       "label": "generate docs",
-      "command": ".venv/bin/pypeline run --step Docs --single",
+      "command": ".venv/bin/pypeline run --step CreateVEnv --step Docs --single",
       "windows": {
-        "command": ".venv/Scripts/pypeline run --step Docs --single"
+        "command": ".venv/Scripts/pypeline run --step CreateVEnv --step Docs --single"
       },
       "type": "shell",
       "presentation": {
@@ -45,9 +45,9 @@
     },
     {
       "label": "run pre-commit checks",
-      "command": ".venv/bin/pypeline run --step PreCommit --single",
+      "command": ".venv/bin/pypeline run --step CreateVEnv --step PreCommit --single",
       "windows": {
-        "command": ".venv/Scripts/pypeline run --step PreCommit --single"
+        "command": ".venv/Scripts/pypeline run --step CreateVEnv --step PreCommit --single"
       },
       "type": "shell",
       "presentation": {
