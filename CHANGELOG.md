@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.13.0 (2025-09-25)
+
+### Features
+
+- Add option to disable objects traceability matrix
+  ([`0dcec99`](https://github.com/cuinixam/clanguru/commit/0dcec9960be79fa452933affe1c93d273db455fc))
+
+- Add option to exclude symbols for object analysis report
+  ([`b210312`](https://github.com/cuinixam/clanguru/commit/b2103123453b626e3111184ac2347960b0186506))
+
+
 ## v0.12.5 (2025-09-15)
 
 ### Bug Fixes
