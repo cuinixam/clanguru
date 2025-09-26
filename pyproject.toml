@@ -42,6 +42,7 @@ build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
 dev = [
+  "coverage>=7,<8",
   "pytest>=8,<9",
   "pytest-cov>=6,<7",
   "pypeline-runner>=1,<2",
@@ -100,7 +101,7 @@ lint.per-file-ignores."tests/**/*" = [
 
 
 [tool.pytest.ini_options]
-addopts = "-vv -Wdefault --cov=clanguru --cov-report=term-missing:skip-covered -cov-report=xml -s"
+addopts = "-vv -Wdefault --cov=clanguru --cov-report=term-missing:skip-covered --cov-report=xml -s"
 pythonpath = ["src"]
 
 [tool.coverage.run]
