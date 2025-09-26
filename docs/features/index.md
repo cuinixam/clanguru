@@ -1,27 +1,159 @@
 # ✨ Features
 
+Clanguru provides four main capabilities for C/C++ code analysis and utility operations:
+
 ## Documentation Generation
 
-Clanguru offers a minimal yet effective way to generate documentation for your C code without relying on complex systems like Doxygen. Here's how it works:
+Clanguru offers a minimal yet effective way to generate documentation for your C/C++ code without relying on complex systems like Doxygen. It supports multiple output formats:
 
-Use the `generate` command to create documentation:
+### Basic Usage
 
-```
-clanguru generate --source-file path/to/your/file.c --output-file path/to/output.md
-```
-
-**Format**
-The documentation is generated in Markdown format, which is easy to read and can be converted to other formats if needed.
-
-**Compilation Database Support**
-If your project uses a compilation database, you can specify it to ensure correct parsing of complex projects:
-
-```
-clanguru generate --source-file path/to/your/file.c --output-file path/to/output.md --compilation-database path/to/compile_commands.json
+```shell
+clanguru docs --source-file path/to/your/file.c --output-file path/to/output.md
 ```
 
-This approach to documentation generation is ideal for projects that need quick, straightforward documentation without the overhead of more complex systems.
-It's particularly useful for small to medium-sized projects or for generating internal documentation.
+### Output Formats
+
+**Myst Markdown (default)**
+```shell
+clanguru docs --source-file src/example.c --output-file docs/example.md --format myst
+```
+
+**RestructuredText**
+```shell
+clanguru docs --source-file src/example.c --output-file docs/example.rst --format rst
+```
+
+### Compilation Database Support
+
+For complex projects with external headers, specify a compilation database:
+
+```shell
+clanguru docs --source-file src/example.c --output-file docs/example.md --compilation-database compile_commands.json
+```
+
+This approach is ideal for projects that need quick, straightforward documentation without the overhead of more complex systems.
+
+## Mock Generation
+
+Generate C function mocks for unit testing with support for GMock and CMock frameworks.
+
+### Basic Mock Generation
+
+```shell
+clanguru mock --source-file src/api.h \
+  --symbol function1 --symbol function2 \
+  --output-dir tests/mocks \
+  --filename api_mock
+```
+
+### Extract Symbols from Object Files
+
+Automatically extract symbols from partially linked object files:
+
+```shell
+clanguru mock --source-file src/api.h \
+  --partial-object-file build/partial.o \
+  --output-dir tests/mocks \
+  --filename api_mock \
+  --mock-type gmock
+```
+
+### Pattern-Based Symbol Exclusion
+
+Exclude symbols using glob patterns:
+
+```shell
+clanguru mock --source-file src/api.h \
+  --symbol function1 --symbol function2 \
+  --output-dir tests/mocks \
+  --filename api_mock \
+  --exclude-symbol-pattern "_internal*" \
+  --exclude-symbol-pattern "*_test"
+```
+
+### Configuration Files
+
+Use YAML configuration for complex setups:
+
+```yaml
+# mock_config.yaml
+mock_type: gmock
+strict: true
+exclude_symbol_patterns:
+  - "_internal*"
+  - "*_test"
+  - "debug_*"
+```
+
+```shell
+clanguru mock --source-file src/api.h \
+  --output-dir tests/mocks \
+  --filename api_mock \
+  --config-file mock_config.yaml
+```
+
+## Object File Analysis
+
+Analyze object file dependencies and generate comprehensive reports for understanding your project's symbol usage and dependencies.
+
+### HTML Dependency Reports
+
+Generate interactive HTML reports showing object dependencies:
+
+```shell
+clanguru analyze --compilation-database compile_commands.json --output-file dependencies.html
+```
+
+### Excel Reports
+
+Create Excel spreadsheets for detailed analysis:
+
+```shell
+clanguru analyze --compilation-database compile_commands.json --output-file dependencies.xlsx
+```
+
+### Advanced Analysis Options
+
+Include parent dependencies and create traceability matrices:
+
+```shell
+clanguru analyze --compilation-database compile_commands.json \
+  --output-file dependencies.xlsx \
+  --use-parent-deps \
+  --create-traceability-matrix
+```
+
+### Symbol Filtering
+
+Exclude specific symbol patterns from analysis:
+
+```shell
+clanguru analyze --compilation-database compile_commands.json \
+  --output-file dependencies.html \
+  --exclude-symbol-pattern "_internal*" \
+  --exclude-symbol-pattern "test_*"
+```
+
+## Code Parsing
+
+Parse C/C++ source code and examine the Abstract Syntax Tree (AST) for debugging and analysis.
+
+### Basic Parsing
+
+```shell
+# Parse and print to console
+clanguru parse --source-file src/example.c
+
+# Parse and save to file
+clanguru parse --source-file src/example.c --output-file parsed_output.txt
+```
+
+### Complex Project Parsing
+
+```shell
+clanguru parse --source-file src/example.c --compilation-database compile_commands.json
+```
 
 **Example**
 

@@ -100,7 +100,7 @@ lint.per-file-ignores."tests/**/*" = [
 
 
 [tool.pytest.ini_options]
-addopts = "-vv -Wdefault --cov=clanguru --cov-report=term-missing:skip-covered -s"
+addopts = "-vv -Wdefault --cov=clanguru --cov-report=term-missing:skip-covered -cov-report=xml -s"
 pythonpath = ["src"]
 
 [tool.coverage.run]

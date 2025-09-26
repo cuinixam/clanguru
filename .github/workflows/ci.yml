@@ -31,7 +31,7 @@ jobs:
     name: Lint Commit Messages
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: wagoid/commitlint-github-action@v6
@@ -48,9 +48,9 @@ jobs:
           - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install pypeline runner
@@ -79,14 +79,14 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
 
         # Do a dry run of release
       - name: Test release
-        uses: python-semantic-release/python-semantic-release@v9
+        uses: python-semantic-release/python-semantic-release@v10
         if: github.ref_name != 'main'
         with:
           root_options: --noop
@@ -94,7 +94,7 @@ jobs:
 
         # On main branch: actual release + upload to PyPI & GitHub
       - name: Release
-        uses: python-semantic-release/python-semantic-release@v9
+        uses: python-semantic-release/python-semantic-release@v10
         id: release
         if: github.ref_name == 'main'
         with:
