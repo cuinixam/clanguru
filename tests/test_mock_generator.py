@@ -12,7 +12,7 @@ from clanguru.mock_generator import (
     extract_symbols_data,
     find_symbols,
 )
-from tests.conftest import assert_element_of_type
+from tests.conftest import assert_element_of_type, assert_elements_of_type
 
 
 def test_find_symbols_functions_and_variables(tmp_path: Path) -> None:
@@ -202,3 +202,82 @@ mock_type: gmock
     for symbol in ["_global", "mem_copy"]:
         assert f"{symbol} : reason=excluded_by_pattern" in log_file_content
     assert "status: success" in log_file_content  # Should succeed since strict=false
+
+
+def test_symbols_deduplication_across_multiple_translation_units(tmp_path: Path) -> None:
+    """Test that duplicate symbols found across multiple source files are properly deduplicated."""
+    # Create a shared header with function and variable declarations
+    shared_header = tmp_path / "shared_api.h"
+    shared_header.write_text(
+        dedent(
+            """
+            #ifndef SHARED_API_H
+            #define SHARED_API_H
+
+            extern int shared_function(int param);
+            extern void init_function(void);
+            extern int shared_variable;
+
+            #endif /* SHARED_API_H */
+            """
+        )
+    )
+
+    # Create multiple source files that all include the same header
+    source_files = []
+    for i in range(3):
+        source = tmp_path / f"source{i + 1}.c"
+        source.write_text(
+            dedent(
+                f"""
+                #include "shared_api.h"
+
+                static void local_function{i + 1}() {{
+                    shared_variable = {i + 1};
+                    shared_function(shared_variable);
+                    init_function();
+                }}
+                """
+            )
+        )
+        source_files.append(source)
+
+    # Parse all source files
+    parser = CLangParser()
+    translation_units = [parser.load(source) for source in source_files]
+
+    # Find symbols across all translation units
+    symbols_to_find = {"shared_function", "init_function", "shared_variable"}
+    found_symbols = find_symbols(translation_units, symbols_to_find)
+
+    # Verify deduplication: each symbol should appear exactly once despite being in multiple TUs
+    symbol_names = [fs.symbol.name for fs in found_symbols]
+    name_counts = {name: symbol_names.count(name) for name in set(symbol_names)}
+
+    assert name_counts["shared_function"] == 1, f"Expected 1 shared_function, got {name_counts['shared_function']}"
+    assert name_counts["init_function"] == 1, f"Expected 1 init_function, got {name_counts['init_function']}"
+    assert name_counts["shared_variable"] == 1, f"Expected 1 shared_variable, got {name_counts['shared_variable']}"
+
+    # Verify extracted data is also deduplicated using helper functions
+    symbols_data = extract_symbols_data(found_symbols)
+
+    # Should find exactly 2 functions and 1 variable
+    functions = assert_elements_of_type(symbols_data, FoundFunction, 2)
+    variables = assert_elements_of_type(symbols_data, FoundVariable, 1)
+
+    # Verify specific functions exist exactly once
+    shared_func = assert_element_of_type(functions, FoundFunction, lambda f: f.name == "shared_function")
+    init_func = assert_element_of_type(functions, FoundFunction, lambda f: f.name == "init_function")
+    shared_var = assert_element_of_type(variables, FoundVariable, lambda v: v.name == "shared_variable")
+
+    # Verify function properties
+    assert shared_func.return_type == "int"
+    assert len(shared_func.parameters) == 1
+    assert shared_func.parameters[0].name == "param"
+    assert shared_func.parameters[0].type == "int"
+
+    assert init_func.return_type == "void"
+    assert len(init_func.parameters) == 0
+
+    # Verify variable properties
+    assert shared_var.type == "int"

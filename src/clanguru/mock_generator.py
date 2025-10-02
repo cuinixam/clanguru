@@ -189,9 +189,14 @@ def find_symbols(translation_units: list[TranslationUnit], symbols: set[str]) ->
                     break
             symbol = definition or decls[0]
             results.append(FoundSymbol(translation_unit=tu, symbol=symbol, header_file=header_file))
+
+    # Deduplicate symbols: same symbol found across multiple translation units should only appear once
+    key_to_symbol = {(fs.symbol.name, fs.header_file): fs for fs in results}
+    deduplicated_results = list(key_to_symbol.values())
+
     # Ensure global deterministic ordering by symbol name then TU path
-    results.sort(key=lambda r: (r.symbol.name, str(r.translation_unit.source_file)))
-    return results
+    deduplicated_results.sort(key=lambda r: (r.symbol.name, str(r.translation_unit.source_file)))
+    return deduplicated_results
 
 
 def extract_symbols_data(symbols: list[FoundSymbol]) -> list[FoundVariable | FoundFunction]:

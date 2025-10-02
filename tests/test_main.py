@@ -214,3 +214,68 @@ mock_type: gmock
     log_content = (tmp_path / "config_mock.log").read_text()
     assert "_internal_func : reason=excluded_by_pattern" in log_content
     assert "status: success" in log_content
+
+
+@pytest.mark.skip(reason="exploratory test")
+def test_debug_mock_behaviour() -> None:
+    project_dir = Path("D:/ateliere/spledy")
+    output_dir = Path("C:/temp")
+    partial_object_file = project_dir.joinpath(".yanga/build/Disco/gtest/test_integrations_spled/test_integrations_spled_PC.o")
+    compilation_db = project_dir.joinpath(".yanga/build/Disco/gtest/compile_commands.json")
+    sources = [
+        "components/spled/src/spled.c",
+        "components/rte/src/rte.c",
+        "components/brightness_controller/src/brightness_controller.c",
+        "components/light_controller/src/light_controller.c",
+        "components/main_control_knob/src/main_control_knob.c",
+        "components/power_button/src/power_button.c",
+        "components/power_signal_processing/src/power_signal_processing.c",
+    ]
+    result = runner.invoke(
+        app,
+        [
+            "mock",
+            "--filename",
+            "mockup_test_integrations_spled",
+            *[f"--source-file={project_dir.joinpath(source).as_posix()}" for source in sources],
+            "--partial-object-file",
+            partial_object_file.as_posix(),
+            "--compilation-database",
+            compilation_db.as_posix(),
+            "--no-strict",
+            "--exclude-symbol-pattern",
+            "_*",
+            "--output-dir",
+            output_dir.as_posix(),
+        ],
+    )
+    assert result.exit_code == 0
+    for mock_file in ["mockup_test_integrations_spled.h", "mockup_test_integrations_spled.cc", "mockup_test_integrations_spled.log"]:
+        assert (output_dir / mock_file).exists()
+
+    # Check the log to verify the fix - no duplicate symbols
+    log_content = (output_dir / "mockup_test_integrations_spled.log").read_text()
+    print("=== LOG CONTENT ===")
+    print(log_content)
+
+    # Check for duplicate symbols in the mocked symbols section
+    button_pressed_count = log_content.count("function ButtonInterfaceIsButtonPressed ->")
+    button_init_count = log_content.count("function buttonInterface_init ->")
+
+    print(f"ButtonInterfaceIsButtonPressed appears {button_pressed_count} times in log")
+    print(f"buttonInterface_init appears {button_init_count} times in log")
+
+    # After the fix, each symbol should appear exactly once
+    assert button_pressed_count == 1, f"Expected ButtonInterfaceIsButtonPressed to appear exactly once, got {button_pressed_count}"
+    assert button_init_count == 1, f"Expected buttonInterface_init to appear exactly once, got {button_init_count}"
+
+    # Also check the generated header for no duplicates
+    header_content = (output_dir / "mockup_test_integrations_spled.h").read_text()
+    mock_method_button_count = header_content.count("MOCK_METHOD((boolean), ButtonInterfaceIsButtonPressed, (KeyCodes key));")
+    mock_method_init_count = header_content.count("MOCK_METHOD((void), buttonInterface_init, ());")
+
+    print(f"MOCK_METHOD for ButtonInterfaceIsButtonPressed appears {mock_method_button_count} times")
+    print(f"MOCK_METHOD for buttonInterface_init appears {mock_method_init_count} times")
+
+    assert mock_method_button_count == 1, f"Expected single MOCK_METHOD for ButtonInterfaceIsButtonPressed, got {mock_method_button_count}"
+    assert mock_method_init_count == 1, f"Expected single MOCK_METHOD for buttonInterface_init, got {mock_method_init_count}"
