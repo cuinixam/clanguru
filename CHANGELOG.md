@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.13.1 (2025-10-02)
+
+### Bug Fixes
+
+- Same symbols are mocked multiple times
+  ([`a31c50f`](https://github.com/cuinixam/clanguru/commit/a31c50f17ed2462ef2158e7970bd6dff9858897a))
+
+
 ## v0.13.0 (2025-09-25)
 
 ### Features
