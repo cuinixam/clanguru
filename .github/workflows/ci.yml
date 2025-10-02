@@ -86,7 +86,7 @@ jobs:
 
         # Do a dry run of release
       - name: Test release
-        uses: python-semantic-release/python-semantic-release@v10
+        uses: python-semantic-release/python-semantic-release@v9
         if: github.ref_name != 'main'
         with:
           root_options: --noop
@@ -94,7 +94,7 @@ jobs:
 
         # On main branch: actual release + upload to PyPI & GitHub
       - name: Release
-        uses: python-semantic-release/python-semantic-release@v10
+        uses: python-semantic-release/python-semantic-release@v9
         id: release
         if: github.ref_name == 'main'
         with:
