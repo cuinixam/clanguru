@@ -8,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from clanguru.main import app
-from clanguru.object_analyzer import ObjectData, Symbol, SymbolLinkage, filter_object_data_symbols
+from clanguru.object_analyzer import ObjectDependencies, Symbol, SymbolLinkage, filter_object_data_symbols
 
 runner = CliRunner()
 
@@ -16,7 +16,7 @@ runner = CliRunner()
 def test_filter_object_data_symbols_helper() -> None:
     """Test the filter_object_data_symbols function directly."""
     # Create test object data
-    obj1 = ObjectData(Path("test1.o"))
+    obj1 = ObjectDependencies(Path("test1.o"))
     obj1.symbols = [
         Symbol("main", SymbolLinkage.LOCAL),
         Symbol("_internal_func", SymbolLinkage.LOCAL),
@@ -24,7 +24,7 @@ def test_filter_object_data_symbols_helper() -> None:
         Symbol("_debug_var", SymbolLinkage.EXTERN),
     ]
 
-    obj2 = ObjectData(Path("test2.o"))
+    obj2 = ObjectDependencies(Path("test2.o"))
     obj2.symbols = [
         Symbol("helper", SymbolLinkage.LOCAL),
         Symbol("_private_func", SymbolLinkage.LOCAL),
@@ -73,7 +73,7 @@ def test_analyze_with_exclusion_option(tmp_path: Path) -> None:
 
     # Mock the parse_objects function to return predictable data
     mock_obj_data = [
-        ObjectData(
+        ObjectDependencies(
             path=tmp_path / "test.o",
             symbols=[
                 Symbol("main", SymbolLinkage.LOCAL),

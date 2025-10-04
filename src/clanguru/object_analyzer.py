@@ -17,6 +17,8 @@ from openpyxl.utils import get_column_letter
 from py_app_dev.core.exceptions import UserNotificationException
 from py_app_dev.core.subprocess import SubprocessExecutor
 
+from clanguru.compilation_options_manager import CompilationDatabase, CompileCommand
+
 
 class SymbolLinkage(Enum):
     EXTERN = auto()
@@ -30,7 +32,7 @@ class Symbol:
 
 
 @dataclass
-class ObjectData:
+class ObjectDependencies:
     path: Path
     symbols: list[Symbol] = field(default_factory=list)
 
@@ -49,10 +51,40 @@ class ObjectData:
         return {symbol.name for symbol in self.symbols if symbol.linkage == SymbolLinkage.LOCAL}
 
 
+@dataclass
+class ObjectReportData:
+    object_dependencies: ObjectDependencies
+    compile_command: CompileCommand
+
+    @property
+    def name(self) -> str:
+        return self.object_dependencies.name
+
+    @property
+    def source_file(self) -> Path:
+        return self.compile_command.get_file_path()
+
+    @property
+    def object_file(self) -> Path:
+        return self.object_dependencies.path
+
+    @property
+    def symbols(self) -> list[Symbol]:
+        return self.object_dependencies.symbols
+
+    @property
+    def required_symbols(self) -> set[str]:
+        return self.object_dependencies.required_symbols
+
+    @property
+    def provided_symbols(self) -> set[str]:
+        return self.object_dependencies.provided_symbols
+
+
 class NmExecutor:
     @staticmethod
-    def run(obj_file: Path) -> ObjectData:
-        obj_data = ObjectData(obj_file)
+    def run(obj_file: Path) -> ObjectDependencies:
+        obj_data = ObjectDependencies(obj_file)
         executor = SubprocessExecutor(command=["nm", obj_file], capture_output=True, print_output=False)
         completed_process = executor.execute(handle_errors=False)
         if completed_process:
@@ -88,7 +120,7 @@ class NmExecutor:
         return None
 
 
-def parse_objects(obj_files: list[Path], max_workers: Optional[int] = None) -> list[ObjectData]:
+def parse_objects(obj_files: list[Path], max_workers: Optional[int] = None) -> list[ObjectDependencies]:
     """Run the nm executor on each object file in parallel, collecting all the resulting ObjectData in the same order as `obj_files`."""
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         # executor.map preserves input order in its output sequence
@@ -97,7 +129,7 @@ def parse_objects(obj_files: list[Path], max_workers: Optional[int] = None) -> l
     return results
 
 
-def filter_object_data_symbols(object_data: list[ObjectData], exclude_patterns: list[str] | None) -> list[ObjectData]:
+def filter_object_data_symbols(object_data: list[ObjectDependencies], exclude_patterns: list[str] | None) -> list[ObjectDependencies]:
     """
     Filter object symbols by glob patterns returning fresh ``ObjectData`` instances.
 
@@ -118,15 +150,15 @@ def filter_object_data_symbols(object_data: list[ObjectData], exclude_patterns: 
     if not exclude_patterns:
         return object_data
 
-    filtered: list[ObjectData] = []
+    filtered: list[ObjectDependencies] = []
     for obj in object_data:
         kept_symbols = [s for s in obj.symbols if not any(fnmatch.fnmatch(s.name, pat) for pat in exclude_patterns)]
         # Recreate ObjectData to avoid stale cached_property values
-        filtered.append(ObjectData(path=obj.path, symbols=kept_symbols))
+        filtered.append(ObjectDependencies(path=obj.path, symbols=kept_symbols))
     return filtered
 
 
-def filter_external_symbols_only(object_data: list[ObjectData]) -> list[ObjectData]:
+def filter_external_symbols_only(object_data: list[ObjectDependencies]) -> list[ObjectDependencies]:
     """
     Filter object data to keep only symbols with external linkage (EXTERN).
 
@@ -140,12 +172,23 @@ def filter_external_symbols_only(object_data: list[ObjectData]) -> list[ObjectDa
         New list with only symbols that have external linkage (SymbolLinkage.EXTERN).
 
     """
-    filtered: list[ObjectData] = []
+    filtered: list[ObjectDependencies] = []
     for obj in object_data:
         extern_symbols = [s for s in obj.symbols if s.linkage == SymbolLinkage.EXTERN]
         # Recreate ObjectData to avoid stale cached_property values
-        filtered.append(ObjectData(path=obj.path, symbols=extern_symbols))
+        filtered.append(ObjectDependencies(path=obj.path, symbols=extern_symbols))
     return filtered
+
+
+def create_report_data(compilation_database: CompilationDatabase, object_data: list[ObjectDependencies]) -> list[ObjectReportData]:
+    """Create a list of ObjectReportData by matching object files from the compilation database with parsed object data."""
+    report_data: list[ObjectReportData] = []
+    object_data_map = {obj.path: obj for obj in object_data}
+    for command in compilation_database.commands:
+        output_path = command.get_output_path()
+        if output_path and output_path in object_data_map:
+            report_data.append(ObjectReportData(object_dependencies=object_data_map[output_path], compile_command=command))
+    return report_data
 
 
 @dataclass
@@ -154,7 +197,7 @@ class DirectoryNode:
 
     name: str
     children: dict[str, "DirectoryNode"] = field(default_factory=dict)
-    objects: list[ObjectData] = field(default_factory=list)
+    objects: list[ObjectReportData] = field(default_factory=list)
 
 
 class DirectoryTreeIterator:
@@ -168,12 +211,12 @@ class DirectoryTreeIterator:
 
     def __init__(self, root_nodes: dict[str, DirectoryNode]):
         self._node_queue: deque[tuple[Optional[str], DirectoryNode]] = deque([(None, node) for node in root_nodes.values()])  # Queue for nodes to visit, with parent name
-        self._object_queue: deque[tuple[str, ObjectData]] = deque()  # Queue for objects to yield from the current node
+        self._object_queue: deque[tuple[str, ObjectReportData]] = deque()  # Queue for objects to yield from the current node
 
     def __iter__(self) -> "DirectoryTreeIterator":
         return self
 
-    def __next__(self) -> tuple[Optional[str], Union[DirectoryNode, ObjectData]]:
+    def __next__(self) -> tuple[Optional[str], Union[DirectoryNode, ObjectReportData]]:
         while True:
             # If there are objects buffered from the last node, yield them first
             if self._object_queue:
@@ -199,8 +242,8 @@ class DirectoryTreeIterator:
 
 
 class ObjectsDependenciesReportGenerator:
-    def __init__(self, object_data: list[ObjectData], use_parent_deps: bool = False):
-        self.object_data = object_data
+    def __init__(self, objects_data: list[ObjectReportData], use_parent_deps: bool = False):
+        self.objects_data = objects_data
         self.use_parent_deps = use_parent_deps
 
     def generate_report(self, output_file: Path) -> None:
@@ -216,13 +259,13 @@ class ObjectsDependenciesReportGenerator:
             file.write(rendered_html)
 
     @staticmethod
-    def _build_directory_tree(objects: list[ObjectData]) -> dict[str, DirectoryNode]:
+    def _build_directory_tree(objects_data: list[ObjectReportData]) -> dict[str, DirectoryNode]:
         """Builds a nested structure representing the directory hierarchy, stopping at 'CMakeFiles'."""
-        common_path = ObjectsDependenciesReportGenerator._determine_common_path([obj.path.absolute() for obj in objects])
+        common_path = ObjectsDependenciesReportGenerator._determine_common_path([object_data.object_file.absolute() for object_data in objects_data])
         root_nodes: dict[str, DirectoryNode] = {}
 
-        for obj in objects:
-            obj_relative_path = obj.path.parent.resolve().relative_to(common_path)
+        for object_data in objects_data:
+            obj_relative_path = object_data.object_file.parent.resolve().relative_to(common_path)
             parts = list(obj_relative_path.parts)
             parts = parts[: parts.index("CMakeFiles")]  # Keep parts up to, but not including, CMakeFiles
 
@@ -238,7 +281,7 @@ class ObjectsDependenciesReportGenerator:
                 current_children = current_node.children  # Move deeper
             # Add the object to the node corresponding to the final directory part
             if current_node:
-                current_node.objects.append(obj)
+                current_node.objects.append(object_data)
 
         return root_nodes
 
@@ -277,7 +320,7 @@ class ObjectsDependenciesReportGenerator:
 
     def generate_graph_data(self) -> dict[str, list[dict[str, Any]]]:
         """Converts a list of ObjectData into a dictionary suitable for Cytoscape.js containing nodes and edges representing object dependencies."""
-        objects = self.object_data
+        objects = self.objects_data
         edges = []
         edge_set = set()  # To avoid duplicate edges between the same pair
         node_connections = {obj.name: 0 for obj in objects}
@@ -315,7 +358,7 @@ class ObjectsDependenciesReportGenerator:
         root_nodes = ObjectsDependenciesReportGenerator._build_directory_tree(objects)
         # Iterate over the whole node tree to get the nodes
         for parent_name, node in DirectoryTreeIterator(root_nodes):
-            if isinstance(node, ObjectData):
+            if isinstance(node, ObjectReportData):
                 obj = node
                 node_size = 5 + node_connections[obj.name] * 2  # Example scaling
                 data = {
@@ -410,11 +453,11 @@ class ObjectsDataExcelReportGenerator:
 
     def __init__(
         self,
-        object_data: list[ObjectData],
+        objects_data: list[ObjectReportData],
         use_parent_deps: bool = False,
         create_traceability_matrix: bool = False,
     ) -> None:
-        self.object_data = object_data
+        self.objects_data = objects_data
         self.use_parent_deps = use_parent_deps
         self.create_traceability_matrix = create_traceability_matrix
         self.columns = ExcelColumnMapper()
@@ -436,25 +479,29 @@ class ObjectsDataExcelReportGenerator:
         # Create grouped headers
         self._create_grouped_headers(ws, self.columns)
 
-        for row, obj in enumerate(self.object_data, 3):  # Start from row 3 due to grouped headers
+        for row, object_data in enumerate(self.objects_data, 3):  # Start from row 3 due to grouped headers
             # Calculate dependencies
-            objects_requiring_from_this = [other_obj.name for other_obj in self.object_data if other_obj != obj and obj.provided_symbols.intersection(other_obj.required_symbols)]
-            objects_providing_to_this = [other_obj.name for other_obj in self.object_data if other_obj != obj and other_obj.provided_symbols.intersection(obj.required_symbols)]
+            objects_requiring_from_this = [
+                other_obj.name for other_obj in self.objects_data if other_obj != object_data and object_data.provided_symbols.intersection(other_obj.required_symbols)
+            ]
+            objects_providing_to_this = [
+                other_obj.name for other_obj in self.objects_data if other_obj != object_data and other_obj.provided_symbols.intersection(object_data.required_symbols)
+            ]
 
             # Calculate used provided interfaces (symbols from this object that are actually required by other objects)
             used_provided_interfaces = set()
-            for other_obj in self.object_data:
-                if other_obj != obj:
-                    used_provided_interfaces.update(obj.provided_symbols.intersection(other_obj.required_symbols))
+            for other_obj in self.objects_data:
+                if other_obj != object_data:
+                    used_provided_interfaces.update(object_data.provided_symbols.intersection(other_obj.required_symbols))
 
-            ws.cell(row=row, column=self.columns.OBJECT_NAME, value=obj.name)
-            ws.cell(row=row, column=self.columns.FILE_PATH, value=str(obj.path))
-            ws.cell(row=row, column=self.columns.PROVIDED_TOTAL, value=len(obj.provided_symbols))
+            ws.cell(row=row, column=self.columns.OBJECT_NAME, value=object_data.name)
+            ws.cell(row=row, column=self.columns.FILE_PATH, value=str(object_data.object_file))
+            ws.cell(row=row, column=self.columns.PROVIDED_TOTAL, value=len(object_data.provided_symbols))
             ws.cell(row=row, column=self.columns.PROVIDED_USED, value=len(used_provided_interfaces))
             ws.cell(row=row, column=self.columns.PROVIDED_DEPENDENCIES, value="\n".join(objects_requiring_from_this) if objects_requiring_from_this else "None")
-            ws.cell(row=row, column=self.columns.REQUIRED_COUNT, value=len(obj.required_symbols))
+            ws.cell(row=row, column=self.columns.REQUIRED_COUNT, value=len(object_data.required_symbols))
             ws.cell(row=row, column=self.columns.REQUIRED_DEPENDENCIES, value="\n".join(objects_providing_to_this) if objects_providing_to_this else "None")
-            ws.cell(row=row, column=self.columns.TOTAL_SYMBOLS, value=len(obj.symbols))
+            ws.cell(row=row, column=self.columns.TOTAL_SYMBOLS, value=len(object_data.symbols))
 
         self._auto_adjust_columns(ws, self.columns.TOTAL_COLUMNS)
 
@@ -463,7 +510,7 @@ class ObjectsDataExcelReportGenerator:
         ws = wb.create_sheet("Dependency Matrix")
 
         interface_usage = self._calculate_interface_usage()
-        obj_names = [obj.name for obj in self.object_data]
+        obj_names = [obj.name for obj in self.objects_data]
 
         fixed_headers = ["Object", "Interface", "Usage Count"]
         headers = [*fixed_headers, *obj_names]
@@ -474,7 +521,7 @@ class ObjectsDataExcelReportGenerator:
         ws.freeze_panes = f"{freeze_column}2"
 
         current_row = 2
-        for obj in self.object_data:
+        for obj in self.objects_data:
             if not obj.provided_symbols:
                 continue
 
@@ -501,7 +548,7 @@ class ObjectsDataExcelReportGenerator:
         usage_cell.font = Font(bold=usage_count > 0)
         usage_cell.alignment = Alignment(horizontal="center", vertical="center")
 
-        for col, requiring_obj in enumerate(self.object_data, 4):
+        for col, requiring_obj in enumerate(self.objects_data, 4):
             if interface_name in requiring_obj.required_symbols:
                 cell = ws.cell(row=row, column=col, value="X")
                 cell.font = Font(bold=True, color="FF0000")
@@ -511,9 +558,9 @@ class ObjectsDataExcelReportGenerator:
         """Calculate usage count for each interface."""
         interface_usage = {}
 
-        for obj in self.object_data:
+        for obj in self.objects_data:
             for symbol in obj.provided_symbols:
-                usage_count = sum(1 for other_obj in self.object_data if symbol in other_obj.required_symbols)
+                usage_count = sum(1 for other_obj in self.objects_data if symbol in other_obj.required_symbols)
                 interface_usage[symbol] = usage_count
 
         return interface_usage

@@ -13,10 +13,12 @@ from clanguru.doc_generator import MarkdownFlavour, MarkdownFormatter, OutputFor
 from clanguru.mock_generator import MocksGenerator, MocksGeneratorConfig, MockType
 from clanguru.object_analyzer import (
     NmExecutor,
-    ObjectData,
+    ObjectDependencies,
+    ObjectReportData,
     ObjectsDataExcelReportGenerator,
     ObjectsDependenciesReportGenerator,
     SymbolLinkage,
+    create_report_data,
     filter_object_data_symbols,
     parse_objects,
 )
@@ -129,7 +131,7 @@ def parse(
         logger.info(translation_unit)
 
 
-def print_objects_data_statistics(object_data: list[ObjectData]) -> None:
+def print_objects_data_statistics(object_data: list[ObjectDependencies]) -> None:
     number_of_objects = len(object_data)
     number_of_local_symbols = 0
     number_of_external_symbols = 0
@@ -155,7 +157,8 @@ def analyze(
     create_traceability_matrix: bool = typer.Option(False, help="Create object dependencies traceability matrix."),
     exclude_symbol_pattern: list[str] = typer.Option(None, help="Symbol patterns to exclude from analysis (glob). Can be used multiple times."),  # noqa: B008
 ) -> None:
-    object_files = CompilationDatabase.from_json_file(compilation_database).get_output_files()
+    compilation_database_data = CompilationDatabase.from_json_file(compilation_database)
+    object_files = compilation_database_data.get_output_files()
     if not object_files:
         raise UserNotificationException("No object files found in the compilation database.")
     logger.info("Parse objects files")
@@ -168,12 +171,14 @@ def analyze(
         object_data = filter_object_data_symbols(object_data, exclude_symbol_pattern)
         print_objects_data_statistics(object_data)
 
+    # Collect the object data from the compilation database and parsed objects
+    objects_report_data: list[ObjectReportData] = create_report_data(compilation_database_data, object_data)
     # If the file extension is .xls or .xlsx use the ObjectsDataExcelReportGenerator generator.
     if output_file.suffix == ".xlsx":
-        ObjectsDataExcelReportGenerator(object_data, use_parent_deps=use_parent_deps, create_traceability_matrix=create_traceability_matrix).generate_report(output_file)
+        ObjectsDataExcelReportGenerator(objects_report_data, use_parent_deps=use_parent_deps, create_traceability_matrix=create_traceability_matrix).generate_report(output_file)
         logger.info("Dependencies report generated in Excel format.")
     else:
-        ObjectsDependenciesReportGenerator(object_data, use_parent_deps=use_parent_deps).generate_report(output_file)
+        ObjectsDependenciesReportGenerator(objects_report_data, use_parent_deps=use_parent_deps).generate_report(output_file)
         logger.info("Dependencies report generated.")
 
 

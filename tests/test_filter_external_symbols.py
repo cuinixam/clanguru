@@ -2,12 +2,12 @@
 
 from pathlib import Path
 
-from clanguru.object_analyzer import ObjectData, Symbol, SymbolLinkage, filter_external_symbols_only
+from clanguru.object_analyzer import ObjectDependencies, Symbol, SymbolLinkage, filter_external_symbols_only
 
 
 def test_filter_external_symbols_only_basic() -> None:
     """Test filter_external_symbols_only with mixed symbol types."""
-    obj1 = ObjectData(Path("test1.o"))
+    obj1 = ObjectDependencies(Path("test1.o"))
     obj1.symbols = [
         Symbol("main", SymbolLinkage.LOCAL),  # Should be filtered out
         Symbol("helper_func", SymbolLinkage.LOCAL),  # Should be filtered out
@@ -32,21 +32,21 @@ def test_filter_external_symbols_only_basic() -> None:
 
 def test_filter_external_symbols_only_multiple_objects() -> None:
     """Test filter_external_symbols_only with multiple objects."""
-    obj1 = ObjectData(Path("test1.o"))
+    obj1 = ObjectDependencies(Path("test1.o"))
     obj1.symbols = [
         Symbol("main", SymbolLinkage.LOCAL),
         Symbol("printf", SymbolLinkage.EXTERN),
         Symbol("local_helper", SymbolLinkage.LOCAL),
     ]
 
-    obj2 = ObjectData(Path("test2.o"))
+    obj2 = ObjectDependencies(Path("test2.o"))
     obj2.symbols = [
         Symbol("calculate", SymbolLinkage.LOCAL),
         Symbol("malloc", SymbolLinkage.EXTERN),
         Symbol("free", SymbolLinkage.EXTERN),
     ]
 
-    obj3 = ObjectData(Path("test3.o"))
+    obj3 = ObjectDependencies(Path("test3.o"))
     obj3.symbols = [
         Symbol("internal_func", SymbolLinkage.LOCAL),
         Symbol("static_var", SymbolLinkage.LOCAL),
@@ -75,7 +75,7 @@ def test_filter_external_symbols_only_multiple_objects() -> None:
 
 def test_filter_external_symbols_only_all_local() -> None:
     """Test filter_external_symbols_only when all symbols are local."""
-    obj1 = ObjectData(Path("test1.o"))
+    obj1 = ObjectDependencies(Path("test1.o"))
     obj1.symbols = [
         Symbol("main", SymbolLinkage.LOCAL),
         Symbol("helper", SymbolLinkage.LOCAL),
@@ -91,7 +91,7 @@ def test_filter_external_symbols_only_all_local() -> None:
 
 def test_filter_external_symbols_only_all_external() -> None:
     """Test filter_external_symbols_only when all symbols are external."""
-    obj1 = ObjectData(Path("test1.o"))
+    obj1 = ObjectDependencies(Path("test1.o"))
     obj1.symbols = [
         Symbol("printf", SymbolLinkage.EXTERN),
         Symbol("malloc", SymbolLinkage.EXTERN),
@@ -110,10 +110,10 @@ def test_filter_external_symbols_only_all_external() -> None:
 
 def test_filter_external_symbols_only_no_symbols() -> None:
     """Test filter_external_symbols_only with objects that have no symbols."""
-    obj1 = ObjectData(Path("empty1.o"))
+    obj1 = ObjectDependencies(Path("empty1.o"))
     obj1.symbols = []
 
-    obj2 = ObjectData(Path("empty2.o"))
+    obj2 = ObjectDependencies(Path("empty2.o"))
     obj2.symbols = []
 
     object_data = [obj1, obj2]
@@ -132,7 +132,7 @@ def test_filter_external_symbols_only_empty_object_list() -> None:
 
 def test_filter_external_symbols_only_preserves_object_properties() -> None:
     """Test that filter_external_symbols_only creates new instances and preserves ObjectData properties."""
-    original_obj = ObjectData(Path("original/test.o"))
+    original_obj = ObjectDependencies(Path("original/test.o"))
     original_obj.symbols = [
         Symbol("main", SymbolLinkage.LOCAL),
         Symbol("printf", SymbolLinkage.EXTERN),
@@ -163,7 +163,7 @@ def test_filter_external_symbols_only_preserves_object_properties() -> None:
 
 def test_filter_external_symbols_only_cached_properties() -> None:
     """Test that filtered ObjectData instances have fresh cached property values."""
-    obj = ObjectData(Path("test.o"))
+    obj = ObjectDependencies(Path("test.o"))
     obj.symbols = [
         Symbol("provided_func", SymbolLinkage.LOCAL),  # Will be filtered out
         Symbol("required_func", SymbolLinkage.EXTERN),  # Will be kept

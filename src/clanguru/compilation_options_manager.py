@@ -25,6 +25,7 @@ class PathField(SerializableType):
 @dataclass
 class CompileCommand(DataClassDictMixin):
     directory: Path
+    #: The source file to compile
     file: Path
     arguments: list[str] | None = None
     command: str | None = None

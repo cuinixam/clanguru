@@ -5,7 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from clanguru.main import app
-from clanguru.object_analyzer import ObjectData, Symbol, SymbolLinkage
+from clanguru.object_analyzer import ObjectDependencies, Symbol, SymbolLinkage
 
 runner = CliRunner()
 
@@ -115,7 +115,7 @@ def test_mock_with_partial_object_file_only(tmp_path: Path) -> None:
     partial_obj_file.write_bytes(b"fake object file content")
 
     # Mock the NmExecutor.run method to return expected symbols
-    mock_object_data = ObjectData(partial_obj_file)
+    mock_object_data = ObjectDependencies(partial_obj_file)
     mock_object_data.symbols = [
         Symbol(name="add", linkage=SymbolLinkage.EXTERN),
         Symbol(name="print_result", linkage=SymbolLinkage.EXTERN),

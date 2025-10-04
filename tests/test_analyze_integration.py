@@ -2,14 +2,14 @@
 
 from pathlib import Path
 
-from clanguru.object_analyzer import ObjectData, Symbol, SymbolLinkage, filter_external_symbols_only, filter_object_data_symbols
+from clanguru.object_analyzer import ObjectDependencies, Symbol, SymbolLinkage, filter_external_symbols_only, filter_object_data_symbols
 
 
 def test_analyze_command_filtering_integration() -> None:
     """Test the complete filtering pipeline used by analyze command."""
     # Create test data that simulates what parse_objects would return
     original_data = [
-        ObjectData(
+        ObjectDependencies(
             path=Path("test1.o"),
             symbols=[
                 # LOCAL symbols - should be filtered out by external filtering
@@ -24,7 +24,7 @@ def test_analyze_command_filtering_integration() -> None:
                 Symbol("valid_dependency", SymbolLinkage.EXTERN),
             ],
         ),
-        ObjectData(
+        ObjectDependencies(
             path=Path("test2.o"),
             symbols=[
                 Symbol("static_func", SymbolLinkage.LOCAL),
@@ -82,7 +82,7 @@ def test_analyze_command_filtering_no_exclude_patterns() -> None:
     """Test analyze command filtering when no exclude patterns are provided."""
     # Create test data
     original_data = [
-        ObjectData(
+        ObjectDependencies(
             path=Path("test.o"),
             symbols=[
                 Symbol("main", SymbolLinkage.LOCAL),  # Should be filtered out
@@ -112,7 +112,7 @@ def test_analyze_command_filtering_no_exclude_patterns() -> None:
 def test_analyze_command_filtering_empty_patterns() -> None:
     """Test analyze command filtering when empty exclude patterns are provided."""
     original_data = [
-        ObjectData(
+        ObjectDependencies(
             path=Path("test.o"),
             symbols=[
                 Symbol("main", SymbolLinkage.LOCAL),

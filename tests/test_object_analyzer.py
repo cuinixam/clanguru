@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from clanguru.object_analyzer import NmExecutor, ObjectData, ObjectsDependenciesReportGenerator, Symbol, SymbolLinkage
+from clanguru.compilation_options_manager import CompileCommand
+from clanguru.object_analyzer import NmExecutor, ObjectDependencies, ObjectReportData, ObjectsDependenciesReportGenerator, Symbol, SymbolLinkage
 
 
 @pytest.mark.parametrize(
@@ -80,11 +81,29 @@ def create_object_path(file_name: str, rel_path: str | None = None) -> Path:
     return Path(rel_path or "some/common/path/dir1/CMakeFiles").joinpath(file_name).absolute()
 
 
+def create_object_report_data(file_name: str, symbols: list[Symbol], rel_path: str | None = None) -> ObjectReportData:
+    """Helper function to create ObjectReportData with mock CompileCommand."""
+    object_path = create_object_path(file_name, rel_path)
+    source_path = object_path.with_suffix(".c")  # Assume .c source for .o object
+
+    # Create mock CompileCommand
+    compile_command = CompileCommand(
+        directory=object_path.parent,
+        file=source_path,
+        command=f"gcc -c {source_path} -o {object_path}",
+    )
+
+    # Create ObjectDependencies
+    object_dependencies = ObjectDependencies(path=object_path, symbols=symbols)
+
+    return ObjectReportData(object_dependencies=object_dependencies, compile_command=compile_command)
+
+
 def test_generate_graph_data_basic_dependency_pytest():
     """Pytest: Test graph generation with a simple dependency."""
     # Note: ObjectData now calculates provided/required symbols via cached_property
-    obj_a = ObjectData(path=create_object_path("a.o"), symbols=[Symbol("func1", SymbolLinkage.LOCAL), Symbol("func2", SymbolLinkage.EXTERN)])
-    obj_b = ObjectData(path=create_object_path("b.o"), symbols=[Symbol("func2", SymbolLinkage.LOCAL), Symbol("func1", SymbolLinkage.EXTERN)])
+    obj_a = create_object_report_data("a.o", [Symbol("func1", SymbolLinkage.LOCAL), Symbol("func2", SymbolLinkage.EXTERN)])
+    obj_b = create_object_report_data("b.o", [Symbol("func2", SymbolLinkage.LOCAL), Symbol("func1", SymbolLinkage.EXTERN)])
     objects = [obj_a, obj_b]
     graph_data = ObjectsDependenciesReportGenerator(objects).generate_graph_data()
 
@@ -105,8 +124,8 @@ def test_generate_graph_data_basic_dependency_pytest():
 
 def test_generate_graph_data_no_dependency_pytest():
     """Pytest: Test graph generation with no dependencies."""
-    obj_a = ObjectData(path=create_object_path("a.o"), symbols=[Symbol("func1", SymbolLinkage.LOCAL), Symbol("funcX", SymbolLinkage.EXTERN)])
-    obj_b = ObjectData(path=create_object_path("b.o"), symbols=[Symbol("func2", SymbolLinkage.LOCAL), Symbol("funcY", SymbolLinkage.EXTERN)])
+    obj_a = create_object_report_data("a.o", [Symbol("func1", SymbolLinkage.LOCAL), Symbol("funcX", SymbolLinkage.EXTERN)])
+    obj_b = create_object_report_data("b.o", [Symbol("func2", SymbolLinkage.LOCAL), Symbol("funcY", SymbolLinkage.EXTERN)])
     objects = [obj_a, obj_b]
     graph_data = ObjectsDependenciesReportGenerator(objects).generate_graph_data()
 
@@ -120,30 +139,30 @@ def test_generate_graph_data_no_dependency_pytest():
 
 def test_generate_graph_data_complex_dependencies_pytest():
     """Pytest: Test graph generation with multiple dependencies."""
-    obj_a = ObjectData(
-        path=create_object_path("a.o"),
-        symbols=[
+    obj_a = create_object_report_data(
+        "a.o",
+        [
             Symbol("funcA", SymbolLinkage.LOCAL),
             Symbol("funcB", SymbolLinkage.EXTERN),
             Symbol("funcC", SymbolLinkage.EXTERN),
         ],
     )  # Provides A, Requires B, C
-    obj_b = ObjectData(
-        path=create_object_path("b.o"),
-        symbols=[
+    obj_b = create_object_report_data(
+        "b.o",
+        [
             Symbol("funcB", SymbolLinkage.LOCAL),
             Symbol("funcA", SymbolLinkage.EXTERN),
         ],
     )  # Provides B, Requires A
-    obj_c = ObjectData(
-        path=create_object_path("c.o"),
-        symbols=[
+    obj_c = create_object_report_data(
+        "c.o",
+        [
             Symbol("funcC", SymbolLinkage.LOCAL),
         ],
     )  # Provides C, Requires nothing
-    obj_d = ObjectData(
-        path=create_object_path("d.o"),
-        symbols=[
+    obj_d = create_object_report_data(
+        "d.o",
+        [
             Symbol("funcD", SymbolLinkage.LOCAL),
             Symbol("funcE", SymbolLinkage.EXTERN),
         ],
@@ -168,9 +187,9 @@ def test_generate_graph_data_complex_dependencies_pytest():
 
 def test_build_directory_tree_basic_structure():
     """Test the basic structure of the directory tree."""
-    obj_a = ObjectData(path=Path("some/common/path/dir1/CMakeFiles/path/to/ignore/a.o"), symbols=[])
-    obj_c = ObjectData(path=Path("some/common/path/dir1/dir11/dir13/CMakeFiles/path/to/ignore/c.o"), symbols=[])
-    obj_b = ObjectData(path=Path("some/common/path/dir2/dir21/CMakeFiles/path/to/ignore/b.o"), symbols=[])
+    obj_a = create_object_report_data("a.o", [], "some/common/path/dir1/CMakeFiles/path/to/ignore")
+    obj_c = create_object_report_data("c.o", [], "some/common/path/dir1/dir11/dir13/CMakeFiles/path/to/ignore")
+    obj_b = create_object_report_data("b.o", [], "some/common/path/dir2/dir21/CMakeFiles/path/to/ignore")
     objects = [obj_a, obj_b, obj_c]
 
     tree = ObjectsDependenciesReportGenerator._build_directory_tree(objects)
