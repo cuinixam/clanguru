@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.15.0 (2025-10-14)
+
+### Features
+
+- Add search field to html report
+  ([`38f93ca`](https://github.com/cuinixam/clanguru/commit/38f93ca420800cc6559e431f1e5ed45280427f55))
+
+
 ## v0.14.0 (2025-10-14)
 
 ### Features
