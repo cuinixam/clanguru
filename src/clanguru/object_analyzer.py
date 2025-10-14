@@ -2,19 +2,20 @@ import fnmatch
 import os
 import re
 import subprocess
-from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 from jinja2 import Environment, FileSystemLoader
+from mashumaro import DataClassDictMixin
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from py_app_dev.core.exceptions import UserNotificationException
+from py_app_dev.core.logging import time_it
 from py_app_dev.core.subprocess import SubprocessExecutor
 
 from clanguru.compilation_options_manager import CompilationDatabase, CompileCommand
@@ -79,6 +80,309 @@ class ObjectReportData:
     @property
     def provided_symbols(self) -> set[str]:
         return self.object_dependencies.provided_symbols
+
+
+class ObjectReportDataPath:
+    def __init__(self, root_path: Path, rel_path: Path | None = None):
+        self.root_path = root_path
+        self.rel_path = rel_path
+
+    @property
+    def full_path(self) -> Path:
+        return self.root_path / self.rel_path if self.rel_path else self.root_path
+
+
+@dataclass
+class ObjectReportDataTree:
+    """Represents the object report data node in the directory tree where the objects are the leafs."""
+
+    name: str | None
+    path: ObjectReportDataPath
+    children: list["ObjectReportDataTree"] = field(default_factory=list)
+    objects: list[ObjectReportData] = field(default_factory=list)
+
+    @property
+    def id(self) -> str:
+        return self.path.rel_path.as_posix() if self.path.rel_path else (self.name or "root")
+
+
+def determine_common_path(file_paths: list[Path]) -> Path:
+    """Determine common path for files."""
+    try:
+        common_base_str = os.path.commonpath([str(path) for path in file_paths])
+        common_base = Path(common_base_str)
+
+        # If all files are in the same directory, return the parent to ensure we have at least one directory level
+        if all(path == common_base for path in file_paths):
+            return common_base.parent if common_base.parent != common_base else common_base
+
+        return common_base
+    except ValueError:
+        raise UserNotificationException("No common base path found. Ensure all files are in the same directory tree.") from None
+
+
+def build_tree_from_paths(paths: list[list[str]]) -> dict[str, Any]:
+    """Builds a tree from a list of path components."""
+    root: dict[str, Any] = {}
+    for path in paths:
+        current_level = root
+        for part in path:
+            current_level = current_level.setdefault(part, {})
+    return root
+
+
+def collapse_objects_report_data_tree(node: ObjectReportDataTree) -> ObjectReportDataTree:
+    """Recursively collapse nodes that have a total of one child or object."""
+    # First, recursively collapse all children.
+    collapsed_children = [collapse_objects_report_data_tree(child) for child in node.children]
+    node.children = collapsed_children
+
+    # Collapse if the node has exactly one child and no objects
+    if len(node.children) == 1 and len(node.objects) == 0:
+        child = node.children[0]
+        combined_name = f"{node.name}/{child.name}" if node.name else child.name
+        return ObjectReportDataTree(
+            name=combined_name,
+            children=child.children,
+            objects=child.objects,
+            path=ObjectReportDataPath(
+                rel_path=child.path.rel_path,
+                root_path=node.path.root_path,
+            ),
+        )
+
+    # After collapsing individual children, check if we should collect objects from leaf children
+    # Only collect objects from children that have exactly 1 object and no children (single-object leaf nodes)
+    # But only do this for named nodes (not the root node which has name=None)
+    if node.name is not None and collapsed_children:  # Don't collapse into the root node
+        # Separate children into those we can collapse (single-object leaf nodes) and those we keep
+        children_to_keep = []
+        collected_objects = list(node.objects)  # Start with current objects
+
+        for child in collapsed_children:
+            if len(child.children) == 0 and len(child.objects) == 1:
+                # This is a single-object leaf node - collect its object
+                collected_objects.extend(child.objects)
+            else:
+                # Keep this child (either has multiple objects or has children)
+                children_to_keep.append(child)
+
+        # Return the node with potentially collected objects and remaining children
+        return ObjectReportDataTree(
+            name=node.name,
+            children=children_to_keep,
+            objects=collected_objects,
+            path=ObjectReportDataPath(
+                rel_path=node.path.rel_path,
+                root_path=node.path.root_path,
+            ),
+        )
+
+    # This node cannot be collapsed, so return it as is.
+    return node
+
+
+def create_objects_report_data_tree_expanded(objects_report_data: list[ObjectReportData]) -> ObjectReportDataTree:
+    if not objects_report_data:
+        raise ValueError("No object report data available to create tree.")
+
+    files = [obj.source_file for obj in objects_report_data]
+    common_path = determine_common_path(files)
+    root = ObjectReportDataTree(name=None, path=ObjectReportDataPath(rel_path=None, root_path=common_path))
+    node_map: dict[Path, ObjectReportDataTree] = {common_path: root}
+
+    for report_data in sorted(objects_report_data, key=lambda obj: obj.source_file):
+        relative_path = report_data.source_file.relative_to(common_path)
+        parent_path = common_path
+        # Create directory nodes.
+        for part in relative_path.parts[:-1]:
+            current_path = parent_path / part
+            if current_path not in node_map:
+                # Calculate relative path for this node
+                node_rel_path = current_path.relative_to(common_path)
+                new_node = ObjectReportDataTree(name=part, path=ObjectReportDataPath(rel_path=node_rel_path, root_path=common_path))
+                node_map[current_path] = new_node
+                node_map[parent_path].children.append(new_node)
+            parent_path = current_path
+
+        # Add object to its parent node.
+        node_map[parent_path].objects.append(report_data)
+    return root
+
+
+@time_it("create_objects_report_data_tree")
+def create_objects_report_data_tree(objects_report_data: list[ObjectReportData]) -> ObjectReportDataTree:
+    """
+    Create the objects report data tree structure based on the source files.
+
+    Example based on this list of files:
+        C:/temp/my/project/components/comp_a/src/comp_a.c
+        C:/temp/my/project/components/comp_b/src/comp_b.c
+        C:/temp/my/project/mcal/src/mcal.c
+        C:/temp/my/project/mcal/src/drivers/adc.c
+
+    Common path will be: C:/temp/my/project
+
+    Nodes:
+
+    - components
+    - comp_a/src/comp_a.c with parent components
+    - comp_b/src/comp_b.c with parent components
+    - mcal/src
+    - mcal.c with parent mcal/src
+    - drivers/src/adc.c with parent mcal/src
+
+    """
+    if not objects_report_data:
+        raise ValueError("No object report data available to create tree.")
+
+    # Step 1: Build the full tree structure.
+    root = create_objects_report_data_tree_expanded(objects_report_data)
+
+    # Step 2: Collapse the tree.
+    collapsed_root = collapse_objects_report_data_tree(root)
+    return collapsed_root
+
+
+@dataclass
+class ObjectsGraphDataEdgesData(DataClassDictMixin):
+    id: str
+    source: str
+    target: str
+
+
+@dataclass
+class ObjectsGraphDataEdges(DataClassDictMixin):
+    data: ObjectsGraphDataEdgesData
+
+
+@dataclass
+class ObjectsGraphDataNodesData(DataClassDictMixin):
+    content: str
+    font_size: int
+    id: str
+    label: str
+    size: int
+    parent: Optional[str] = None
+
+
+@dataclass
+class ObjectsGraphDataNodes(DataClassDictMixin):
+    data: ObjectsGraphDataNodesData
+
+
+@dataclass
+class ObjectsGraphData(DataClassDictMixin):
+    edges: list[ObjectsGraphDataEdges]
+    nodes: list[ObjectsGraphDataNodes]
+
+
+@time_it("create_objects_graph_data_nodes")
+def create_objects_graph_data_nodes(object_tree: ObjectReportDataTree, node_connections: dict[str, int], use_parent_deps: bool = True) -> list[ObjectsGraphDataNodes]:
+    """
+    Create graph data nodes from the object report data tree.
+
+    Every node in the tree that has a name becomes a graph node.
+    Every object in the leaf nodes becomes a graph node.
+    """
+    nodes: list[ObjectsGraphDataNodes] = []
+
+    def traverse_tree(node: ObjectReportDataTree, parent_name: str | None = None) -> None:
+        """Recursively traverse the tree and create graph nodes."""
+        current_parent: Optional[str] = None
+        if use_parent_deps:
+            # Skip root node (name is None)
+            if node.name is not None:
+                # Create a directory node
+                dir_node_data = ObjectsGraphDataNodesData(
+                    content=node.name,
+                    font_size=12,
+                    id=node.path.rel_path.as_posix() if node.path.rel_path else node.name,
+                    label=node.name,
+                    parent=parent_name if use_parent_deps else None,
+                    size=10,
+                )
+                nodes.append(ObjectsGraphDataNodes(data=dir_node_data))
+                current_parent = node.id
+            else:
+                current_parent = parent_name
+
+        # Create nodes for individual objects
+        for obj in node.objects:
+            obj_file_name = obj.compile_command.file.name
+            label = obj.source_file.relative_to(node.path.full_path).as_posix() if node.path.full_path else obj_file_name
+            # The ID the whole relative path of the object file
+            id = obj.source_file.relative_to(node.path.root_path).as_posix() if node.path.root_path else obj_file_name
+
+            obj_node_data = ObjectsGraphDataNodesData(
+                content=label,
+                font_size=10,
+                id=id,
+                label=label,
+                parent=current_parent if use_parent_deps else None,
+                size=5 + node_connections.get(id, 0) * 2,  # Scaling based on connections
+            )
+            nodes.append(ObjectsGraphDataNodes(data=obj_node_data))
+
+        # Recursively process children
+        for child in node.children:
+            traverse_tree(child, current_parent)
+
+    traverse_tree(object_tree)
+    return nodes
+
+
+@time_it("create_objects_graph_data_edges")
+def create_objects_graph_data_edges(objects_report_data: list[ObjectReportData]) -> tuple[list[ObjectsGraphDataEdges], dict[str, int]]:
+    if not objects_report_data:
+        raise ValueError("No object report data available to create tree.")
+
+    files = [obj.source_file for obj in objects_report_data]
+    common_path = determine_common_path(files)
+
+    # Pre-compute object IDs to avoid repeated relative path calculations
+    object_ids = [obj.source_file.relative_to(common_path).as_posix() for obj in objects_report_data]
+    node_connections = dict.fromkeys(object_ids, 0)
+
+    # Build symbol-to-objects mapping for faster lookups
+    symbol_providers: dict[str, list[int]] = {}  # symbol -> list of object indices that provide it
+
+    for obj_idx, obj in enumerate(objects_report_data):
+        for symbol in obj.provided_symbols:
+            if symbol not in symbol_providers:
+                symbol_providers[symbol] = []
+            symbol_providers[symbol].append(obj_idx)
+
+    edges: list[ObjectsGraphDataEdges] = []
+    edge_set = set()  # To avoid duplicate edges between the same pair
+
+    # For each object, find all objects that provide symbols it requires
+    for obj_idx, obj in enumerate(objects_report_data):
+        obj_id = object_ids[obj_idx]
+
+        # Find all providers for symbols this object requires
+        connected_objects = set()
+        for required_symbol in obj.required_symbols:
+            if required_symbol in symbol_providers:
+                for provider_idx in symbol_providers[required_symbol]:
+                    if provider_idx != obj_idx:  # Don't connect to self
+                        connected_objects.add(provider_idx)
+
+        # Create edges for all connected objects
+        for connected_idx in connected_objects:
+            connected_id = object_ids[connected_idx]
+
+            # Ensure edge ID is consistent regardless of order
+            source_name, target_name = sorted([obj_id, connected_id])
+            edge_id = f"{source_name}.{target_name}"
+
+            if edge_id not in edge_set:
+                edges.append(ObjectsGraphDataEdges(data=ObjectsGraphDataEdgesData(id=edge_id, source=obj_id, target=connected_id)))
+                edge_set.add(edge_id)
+                node_connections[obj_id] += 1
+                node_connections[connected_id] += 1
+
+    return edges, node_connections
 
 
 class NmExecutor:
@@ -191,58 +495,12 @@ def create_report_data(compilation_database: CompilationDatabase, object_data: l
     return report_data
 
 
-@dataclass
-class DirectoryNode:
-    """Represents a node in the directory tree."""
-
-    name: str
-    children: dict[str, "DirectoryNode"] = field(default_factory=dict)
-    objects: list[ObjectReportData] = field(default_factory=list)
-
-
-class DirectoryTreeIterator:
-    """
-    Iterates over a directory tree structure (dict[str, DirectoryNode]) using BFS.
-
-    Yields a tuple of (parent_name, node), where:
-    - parent_name: Optional[str] - The name of the parent node (None for root nodes).
-    - node: Union[DirectoryNode, ObjectData] - The current node or object being visited.
-    """
-
-    def __init__(self, root_nodes: dict[str, DirectoryNode]):
-        self._node_queue: deque[tuple[Optional[str], DirectoryNode]] = deque([(None, node) for node in root_nodes.values()])  # Queue for nodes to visit, with parent name
-        self._object_queue: deque[tuple[str, ObjectReportData]] = deque()  # Queue for objects to yield from the current node
-
-    def __iter__(self) -> "DirectoryTreeIterator":
-        return self
-
-    def __next__(self) -> tuple[Optional[str], Union[DirectoryNode, ObjectReportData]]:
-        while True:
-            # If there are objects buffered from the last node, yield them first
-            if self._object_queue:
-                return self._object_queue.popleft()
-
-            # If node queue is empty, iteration is done
-            if not self._node_queue:
-                raise StopIteration
-
-            # Process the next node in the queue
-            parent_name, current_node = self._node_queue.popleft()
-
-            # Add all objects from this node to the object queue
-            for obj in current_node.objects:
-                self._object_queue.append((current_node.name, obj))
-
-            # Add all children nodes to the node queue for future processing
-            for _, child_node in current_node.children.items():
-                self._node_queue.append((current_node.name, child_node))
-
-            # Yield the current node itself
-            return (parent_name, current_node)
-
-
 class ObjectsDependenciesReportGenerator:
-    def __init__(self, objects_data: list[ObjectReportData], use_parent_deps: bool = False):
+    def __init__(
+        self,
+        objects_data: list[ObjectReportData],
+        use_parent_deps: bool = False,
+    ):
         self.objects_data = objects_data
         self.use_parent_deps = use_parent_deps
 
@@ -252,141 +510,19 @@ class ObjectsDependenciesReportGenerator:
 
         env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
         template = env.get_template("object_analyzer.html.jinja")
-        rendered_html = template.render(graph_data=graph_data)
+        rendered_html = template.render(graph_data=graph_data.to_dict())
 
         # Write the rendered HTML to the output file
         with open(output_file, "w", encoding="utf-8") as file:
             file.write(rendered_html)
 
-    @staticmethod
-    def _build_directory_tree(objects_data: list[ObjectReportData]) -> dict[str, DirectoryNode]:
-        """Builds a nested structure representing the directory hierarchy, stopping at 'CMakeFiles'."""
-        common_path = ObjectsDependenciesReportGenerator._determine_common_path([object_data.object_file.absolute() for object_data in objects_data])
-        root_nodes: dict[str, DirectoryNode] = {}
-
-        for object_data in objects_data:
-            obj_relative_path = object_data.object_file.parent.resolve().relative_to(common_path)
-            parts = list(obj_relative_path.parts)
-            parts = parts[: parts.index("CMakeFiles")]  # Keep parts up to, but not including, CMakeFiles
-
-            # Build tree structure and populate objects
-            current_children = root_nodes
-            current_node: Optional[DirectoryNode] = None
-
-            for part in parts:
-                if part not in current_children:
-                    new_node = DirectoryNode(name=part)
-                    current_children[part] = new_node
-                current_node = current_children[part]
-                current_children = current_node.children  # Move deeper
-            # Add the object to the node corresponding to the final directory part
-            if current_node:
-                current_node.objects.append(object_data)
-
-        return root_nodes
-
-    @staticmethod
-    def _determine_common_path(objects_paths: list[Path]) -> Path:
-        # Find Common Base Path
-        try:
-            common_base_str = os.path.commonpath([str(path) for path in objects_paths])
-            common_base = Path(common_base_str)
-        except ValueError:
-            raise UserNotificationException("No common base path found. Ensure all object files are in the same directory tree.") from None
-
-        # Check if the common base already contains "CMakeFiles" and return the parent parent directory of "CMakeFiles"
-        if "CMakeFiles" in common_base.parts:
-            cmakefiles_index = common_base.parts.index("CMakeFiles")
-            common_base = Path(*common_base.parts[:cmakefiles_index]).parent
-        else:
-            # We need to make sure that there will be at least one root node.
-            # If all objects are in the same directory the common path will be up to the `CMakeFiles` directory and we will end up with no root node!
-            found_empty_path = False
-            for obj_path in objects_paths:
-                obj_relative_path = obj_path.parent.resolve().relative_to(common_base)
-                parts = list(obj_relative_path.parts)
-                # Check if the path contains "CMakeFiles"
-                try:
-                    cmakefiles_index = parts.index("CMakeFiles")
-                    parts = parts[:cmakefiles_index]  # Keep parts up to, but not including, CMakeFiles
-                except ValueError:
-                    raise UserNotificationException(f"'CMakeFiles' directory not found in the path {obj_relative_path}.") from None
-                if not parts:
-                    found_empty_path = True
-                    break
-            if found_empty_path:
-                common_base = common_base.parent
-        return common_base
-
-    def generate_graph_data(self) -> dict[str, list[dict[str, Any]]]:
+    def generate_graph_data(self) -> ObjectsGraphData:
         """Converts a list of ObjectData into a dictionary suitable for Cytoscape.js containing nodes and edges representing object dependencies."""
         objects = self.objects_data
-        edges = []
-        edge_set = set()  # To avoid duplicate edges between the same pair
-        node_connections = {obj.name: 0 for obj in objects}
-
-        # Determine edges and count connections
-        for i in range(len(objects)):
-            for j in range(i + 1, len(objects)):
-                obj1 = objects[i]
-                obj2 = objects[j]
-
-                # Check if obj1 provides any symbol required by obj2
-                provides_required = bool(obj1.provided_symbols.intersection(obj2.required_symbols))
-                # Check if obj2 provides any symbol required by obj1
-                required_provides = bool(obj2.provided_symbols.intersection(obj1.required_symbols))
-
-                if provides_required or required_provides:
-                    # Ensure edge ID is consistent regardless of order
-                    source_name, target_name = sorted([obj1.name, obj2.name])
-                    edge_id = f"{source_name}.{target_name}"
-
-                    if edge_id not in edge_set:
-                        edges.append(
-                            {
-                                "data": {
-                                    "id": edge_id,
-                                    "source": obj1.name,  # Cytoscape doesn't strictly enforce source/target for undirected
-                                    "target": obj2.name,
-                                }
-                            }
-                        )
-                        edge_set.add(edge_id)
-                        node_connections[obj1.name] += 1
-                        node_connections[obj2.name] += 1
-        nodes = []
-        root_nodes = ObjectsDependenciesReportGenerator._build_directory_tree(objects)
-        # Iterate over the whole node tree to get the nodes
-        for parent_name, node in DirectoryTreeIterator(root_nodes):
-            if isinstance(node, ObjectReportData):
-                obj = node
-                node_size = 5 + node_connections[obj.name] * 2  # Example scaling
-                data = {
-                    "data": {
-                        "id": obj.name,
-                        "size": node_size,
-                        "content": obj.name,  # Display object name
-                        "font_size": 10,  # Adjust font size as needed
-                    }
-                }
-                if parent_name and self.use_parent_deps:
-                    data["data"]["parent"] = parent_name
-                nodes.append(data)
-            # This is a DirectoryNode
-            else:
-                data = {
-                    "data": {
-                        "id": node.name,
-                        "size": 5,  # Base size for root nodes
-                        "content": node.name,  # Display object name
-                        "font_size": 10,  # Adjust font size as needed
-                        # TODO: populate parent
-                    }
-                }
-                if parent_name and self.use_parent_deps:
-                    data["data"]["parent"] = parent_name
-                nodes.append(data)
-        return {"nodes": nodes, "edges": edges}
+        objects_report_data_tree = create_objects_report_data_tree(objects)
+        edges, nodes_connections = create_objects_graph_data_edges(objects)
+        nodes = create_objects_graph_data_nodes(objects_report_data_tree, nodes_connections, self.use_parent_deps)
+        return ObjectsGraphData(edges=edges, nodes=nodes)
 
 
 class ExcelColumnMapper:
@@ -494,8 +630,11 @@ class ObjectsDataExcelReportGenerator:
                 if other_obj != object_data:
                     used_provided_interfaces.update(object_data.provided_symbols.intersection(other_obj.required_symbols))
 
+            # Choose file path based on use_object_paths setting
+            file_path = object_data.source_file
+
             ws.cell(row=row, column=self.columns.OBJECT_NAME, value=object_data.name)
-            ws.cell(row=row, column=self.columns.FILE_PATH, value=str(object_data.object_file))
+            ws.cell(row=row, column=self.columns.FILE_PATH, value=str(file_path))
             ws.cell(row=row, column=self.columns.PROVIDED_TOTAL, value=len(object_data.provided_symbols))
             ws.cell(row=row, column=self.columns.PROVIDED_USED, value=len(used_provided_interfaces))
             ws.cell(row=row, column=self.columns.PROVIDED_DEPENDENCIES, value="\n".join(objects_requiring_from_this) if objects_requiring_from_this else "None")

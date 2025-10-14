@@ -153,7 +153,7 @@ def print_objects_data_statistics(object_data: list[ObjectDependencies]) -> None
 def analyze(
     compilation_database: Path = typer.Option(help="Compilation database file"),  # noqa: B008
     output_file: Path = typer.Option(help="Output file"),  # noqa: B008
-    use_parent_deps: bool = typer.Option(False, help="Use parent dependencies."),
+    use_parent_deps: bool = typer.Option(True, help="Use parent dependencies."),
     create_traceability_matrix: bool = typer.Option(False, help="Create object dependencies traceability matrix."),
     exclude_symbol_pattern: list[str] = typer.Option(None, help="Symbol patterns to exclude from analysis (glob). Can be used multiple times."),  # noqa: B008
 ) -> None:

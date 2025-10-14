@@ -3,7 +3,17 @@ from pathlib import Path
 import pytest
 
 from clanguru.compilation_options_manager import CompileCommand
-from clanguru.object_analyzer import NmExecutor, ObjectDependencies, ObjectReportData, ObjectsDependenciesReportGenerator, Symbol, SymbolLinkage
+from clanguru.object_analyzer import (
+    NmExecutor,
+    ObjectDependencies,
+    ObjectReportData,
+    Symbol,
+    SymbolLinkage,
+    collapse_objects_report_data_tree,
+    create_objects_graph_data_nodes,
+    create_objects_report_data_tree,
+    create_objects_report_data_tree_expanded,
+)
 
 
 @pytest.mark.parametrize(
@@ -70,12 +80,6 @@ def test_get_symbol_various(line, expected_name, expected_linkage):
         ),
     ],
 )
-def test_determine_common_path_posix(paths: list[str], expected_common_path_str: str) -> None:
-    """Tests _determine_common_path with POSIX-style paths."""
-    actual_path = ObjectsDependenciesReportGenerator._determine_common_path([Path(p).absolute() for p in paths])
-    assert actual_path == Path(expected_common_path_str).absolute()
-
-
 def create_object_path(file_name: str, rel_path: str | None = None) -> Path:
     """Helper function to create a Path object from a string."""
     return Path(rel_path or "some/common/path/dir1/CMakeFiles").joinpath(file_name).absolute()
@@ -99,113 +103,147 @@ def create_object_report_data(file_name: str, symbols: list[Symbol], rel_path: s
     return ObjectReportData(object_dependencies=object_dependencies, compile_command=compile_command)
 
 
-def test_generate_graph_data_basic_dependency_pytest():
-    """Pytest: Test graph generation with a simple dependency."""
-    # Note: ObjectData now calculates provided/required symbols via cached_property
-    obj_a = create_object_report_data("a.o", [Symbol("func1", SymbolLinkage.LOCAL), Symbol("func2", SymbolLinkage.EXTERN)])
-    obj_b = create_object_report_data("b.o", [Symbol("func2", SymbolLinkage.LOCAL), Symbol("func1", SymbolLinkage.EXTERN)])
-    objects = [obj_a, obj_b]
-    graph_data = ObjectsDependenciesReportGenerator(objects).generate_graph_data()
-
-    assert len(graph_data["nodes"]) == 3
-    assert len(graph_data["edges"]) == 1
-
-    node_map = {n["data"]["id"]: n["data"] for n in graph_data["nodes"]}
-    assert node_map["a.o"]["size"] == 7  # Base 5 + 1 connection * 2
-    assert node_map["b.o"]["size"] == 7  # Base 5 + 1 connection * 2
-    assert node_map["dir1"]["id"] == "dir1"
-
-    edge = graph_data["edges"][0]["data"]
-    assert edge["id"] == "a.o.b.o"
-    assert edge["source"] in ["a.o", "b.o"]
-    assert edge["target"] in ["a.o", "b.o"]
-    assert edge["source"] != edge["target"]
-
-
-def test_generate_graph_data_no_dependency_pytest():
-    """Pytest: Test graph generation with no dependencies."""
-    obj_a = create_object_report_data("a.o", [Symbol("func1", SymbolLinkage.LOCAL), Symbol("funcX", SymbolLinkage.EXTERN)])
-    obj_b = create_object_report_data("b.o", [Symbol("func2", SymbolLinkage.LOCAL), Symbol("funcY", SymbolLinkage.EXTERN)])
-    objects = [obj_a, obj_b]
-    graph_data = ObjectsDependenciesReportGenerator(objects).generate_graph_data()
-
-    assert len(graph_data["nodes"]) == 3
-    assert len(graph_data["edges"]) == 0
-
-    node_map = {n["data"]["id"]: n["data"] for n in graph_data["nodes"]}
-    assert node_map["a.o"]["size"] == 5  # Base 5 + 0 connections * 2
-    assert node_map["b.o"]["size"] == 5  # Base 5 + 0 connections * 2
-
-
-def test_generate_graph_data_complex_dependencies_pytest():
-    """Pytest: Test graph generation with multiple dependencies."""
-    obj_a = create_object_report_data(
-        "a.o",
-        [
-            Symbol("funcA", SymbolLinkage.LOCAL),
-            Symbol("funcB", SymbolLinkage.EXTERN),
-            Symbol("funcC", SymbolLinkage.EXTERN),
-        ],
-    )  # Provides A, Requires B, C
-    obj_b = create_object_report_data(
-        "b.o",
-        [
-            Symbol("funcB", SymbolLinkage.LOCAL),
-            Symbol("funcA", SymbolLinkage.EXTERN),
-        ],
-    )  # Provides B, Requires A
-    obj_c = create_object_report_data(
-        "c.o",
-        [
-            Symbol("funcC", SymbolLinkage.LOCAL),
-        ],
-    )  # Provides C, Requires nothing
-    obj_d = create_object_report_data(
-        "d.o",
-        [
-            Symbol("funcD", SymbolLinkage.LOCAL),
-            Symbol("funcE", SymbolLinkage.EXTERN),
-        ],
-    )  # Provides D, Requires E (isolated)
-    objects = [obj_a, obj_b, obj_c, obj_d]
-    graph_data = ObjectsDependenciesReportGenerator(objects).generate_graph_data()
-
-    assert len(graph_data["nodes"]) == 5
-    assert len(graph_data["edges"]) == 2  # A<->B, A<->C
-
-    node_map = {n["data"]["id"]: n["data"] for n in graph_data["nodes"]}
-    # Connections: A: 2 (B, C), B: 1 (A), C: 1 (A), D: 0
-    assert node_map["a.o"]["size"] == 9  # 5 + 2*2
-    assert node_map["b.o"]["size"] == 7  # 5 + 1*2
-    assert node_map["c.o"]["size"] == 7  # 5 + 1*2
-    assert node_map["d.o"]["size"] == 5  # 5 + 0*2
-
-    edge_ids = {e["data"]["id"] for e in graph_data["edges"]}
-    assert "a.o.b.o" in edge_ids
-    assert "a.o.c.o" in edge_ids
+@pytest.fixture
+def object_report_data_list() -> list[ObjectReportData]:
+    project_directory = Path("C:/temp/my/project")
+    return [
+        ObjectReportData(
+            object_dependencies=ObjectDependencies(path=project_directory / "build/components/comp_a/src/CMakeFiles/comp_a.o", symbols=[]),
+            compile_command=CompileCommand(
+                directory=project_directory,
+                file=project_directory / "components/comp_a/src/comp_a.c",
+                command="gcc ...",
+            ),
+        ),
+        ObjectReportData(
+            object_dependencies=ObjectDependencies(path=project_directory / "build/components/comp_b/src/CMakeFiles/comp_b.o", symbols=[]),
+            compile_command=CompileCommand(
+                directory=project_directory,
+                file=project_directory / "components/comp_b/src/comp_b.c",
+                command="gcc ...",
+            ),
+        ),
+        ObjectReportData(
+            object_dependencies=ObjectDependencies(path=project_directory / "build/mcal/src/CMakeFiles/mcal.o", symbols=[]),
+            compile_command=CompileCommand(
+                directory=project_directory,
+                file=project_directory / "mcal/src/mcal.c",
+                command="gcc ...",
+            ),
+        ),
+        ObjectReportData(
+            object_dependencies=ObjectDependencies(path=project_directory / "build/mcal/src/drivers/CMakeFiles/adc.o", symbols=[]),
+            compile_command=CompileCommand(
+                directory=project_directory,
+                file=project_directory / "mcal/src/drivers/src/adc.c",
+                command="gcc ...",
+            ),
+        ),
+        ObjectReportData(
+            object_dependencies=ObjectDependencies(path=project_directory / "build/mcal/src/drivers/CMakeFiles/io.o", symbols=[]),
+            compile_command=CompileCommand(
+                directory=project_directory,
+                file=project_directory / "mcal/src/drivers/src/io.c",
+                command="gcc ...",
+            ),
+        ),
+    ]
 
 
-def test_build_directory_tree_basic_structure():
-    """Test the basic structure of the directory tree."""
-    obj_a = create_object_report_data("a.o", [], "some/common/path/dir1/CMakeFiles/path/to/ignore")
-    obj_c = create_object_report_data("c.o", [], "some/common/path/dir1/dir11/dir13/CMakeFiles/path/to/ignore")
-    obj_b = create_object_report_data("b.o", [], "some/common/path/dir2/dir21/CMakeFiles/path/to/ignore")
-    objects = [obj_a, obj_b, obj_c]
+def test_create_objects_report_data_tree(object_report_data_list: list[ObjectReportData]) -> None:
+    # Define a list of object report data based on the user's example
+    objects = object_report_data_list
 
-    tree = ObjectsDependenciesReportGenerator._build_directory_tree(objects)
+    # Generate the tree
+    full_tree = create_objects_report_data_tree_expanded(objects)
 
-    assert tree
-    assert len(tree) == 2, "Two top-level directories after removing the common path"
-    assert tree["dir1"].name == "dir1"
-    assert len(tree["dir1"].objects) == 1
-    assert len(tree["dir1"].children) == 1
-    assert tree["dir1"].children["dir11"].name == "dir11"
-    assert tree["dir1"].children["dir11"].children["dir13"].name == "dir13"
-    assert len(tree["dir1"].children["dir11"].children["dir13"].children) == 0
-    assert len(tree["dir1"].children["dir11"].children["dir13"].objects) == 1
-    assert tree["dir2"].name == "dir2"
-    assert len(tree["dir2"].objects) == 0
-    assert len(tree["dir2"].children) == 1
-    assert tree["dir2"].children["dir21"].name == "dir21"
-    assert len(tree["dir2"].children["dir21"].children) == 0
-    assert len(tree["dir2"].children["dir21"].objects) == 1
+    # Assert
+    assert full_tree is not None
+    assert full_tree.name is None  # Root node has no name
+    assert {"components", "mcal"} == {child.name for child in full_tree.children}
+    # Check components subtree
+    components_node = next(child for child in full_tree.children if child.name == "components")
+    assert components_node.path.rel_path == Path("components")
+    assert components_node.path.full_path == Path("C:/temp/my/project/components")
+    assert {"comp_a", "comp_b"} == {child.name for child in components_node.children}
+    comp_a_node = next(child for child in components_node.children if child.name == "comp_a")
+    assert len(comp_a_node.objects) == 0
+    comp_a_src_node = next(child for child in comp_a_node.children if child.name == "src")
+    assert len(comp_a_src_node.objects) == 1
+    assert comp_a_src_node.objects[0].compile_command.file.name == "comp_a.c"
+    comp_b_node = next(child for child in components_node.children if child.name == "comp_b")
+    assert len(comp_b_node.objects) == 0
+    comp_b_src_node = next(child for child in comp_b_node.children if child.name == "src")
+    assert len(comp_b_src_node.objects) == 1
+    assert comp_b_src_node.objects[0].compile_command.file.name == "comp_b.c"
+    # Check mcal subtree
+    mcal_node = next(child for child in full_tree.children if child.name == "mcal")
+    assert len(mcal_node.objects) == 0
+    assert {"src"} == {child.name for child in mcal_node.children}
+    mcal_src_node = next(child for child in mcal_node.children if child.name == "src")
+    assert {"drivers"} == {child.name for child in mcal_src_node.children}
+    assert len(mcal_src_node.children) == 1
+    assert len(mcal_src_node.objects) == 1
+    assert mcal_src_node.objects[0].compile_command.file.name == "mcal.c"
+    drivers_node = next(child for child in mcal_src_node.children if child.name == "drivers")
+    assert len(drivers_node.children) == 1
+    assert len(drivers_node.objects) == 0
+    assert {"src"} == {child.name for child in drivers_node.children}
+    drivers_src_node = next(child for child in drivers_node.children if child.name == "src")
+    assert len(drivers_src_node.children) == 0
+    assert len(drivers_src_node.objects) == 2
+    assert {obj.compile_command.file.name for obj in drivers_src_node.objects} == {"adc.c", "io.c"}
+
+    collapsed_tree = collapse_objects_report_data_tree(full_tree)
+
+    # Assert collapsed tree structure
+    assert collapsed_tree is not None
+    assert collapsed_tree.name is None  # Root node has no name
+    assert {"components", "mcal/src"} == {child.name for child in collapsed_tree.children}
+    # Check components subtree
+    components_node = next(child for child in collapsed_tree.children if child.name == "components")
+    assert components_node.path.rel_path == Path("components")
+    assert components_node.path.full_path == Path("C:/temp/my/project/components")
+    assert components_node.path.root_path == Path("C:/temp/my/project")
+    assert len(components_node.children) == 0
+    assert len(components_node.objects) == 2
+    assert {obj.compile_command.file.name for obj in components_node.objects} == {"comp_a.c", "comp_b.c"}
+    # Check mcal subtree
+    mcal_node = next(child for child in collapsed_tree.children if child.name == "mcal/src")
+    assert len(mcal_node.children) == 1
+    assert len(mcal_node.objects) == 1
+    assert {obj.compile_command.file.name for obj in mcal_node.objects} == {"mcal.c"}
+    drivers_node = next(child for child in mcal_node.children if child.name == "drivers/src")
+    assert len(drivers_node.children) == 0
+    assert len(drivers_node.objects) == 2
+    assert drivers_node.path.rel_path == Path("mcal/src/drivers/src")
+    assert drivers_node.path.full_path == Path("C:/temp/my/project/mcal/src/drivers/src")
+    assert drivers_node.path.root_path == Path("C:/temp/my/project")
+    assert {obj.compile_command.file.name for obj in drivers_node.objects} == {"adc.c", "io.c"}
+
+
+def test_create_objects_graph_data_nodes(object_report_data_list: list[ObjectReportData]) -> None:
+    nodes = create_objects_graph_data_nodes(create_objects_report_data_tree(object_report_data_list), {})
+    # Assert
+    assert len(nodes) == 8
+    assert {node.data.label for node in nodes} == {
+        "components",
+        "comp_a/src/comp_a.c",
+        "comp_b/src/comp_b.c",
+        "mcal/src",
+        "mcal.c",
+        "drivers/src",
+        "adc.c",
+        "io.c",
+    }
+    # The ids are whole relative path
+    assert {node.data.id for node in nodes} == {
+        "components",
+        "components/comp_a/src/comp_a.c",
+        "components/comp_b/src/comp_b.c",
+        "mcal/src",
+        "mcal/src/mcal.c",
+        "mcal/src/drivers/src",
+        "mcal/src/drivers/src/adc.c",
+        "mcal/src/drivers/src/io.c",
+    }

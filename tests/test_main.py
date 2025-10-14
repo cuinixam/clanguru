@@ -279,3 +279,22 @@ def test_debug_mock_behaviour() -> None:
 
     assert mock_method_button_count == 1, f"Expected single MOCK_METHOD for ButtonInterfaceIsButtonPressed, got {mock_method_button_count}"
     assert mock_method_init_count == 1, f"Expected single MOCK_METHOD for buttonInterface_init, got {mock_method_init_count}"
+
+
+@pytest.mark.skip(reason="exploratory test")
+def test_debug_html_report() -> None:
+    html_report = Path("C:/temp/debug_report.html")
+    # compilation_db = Path("D:/ateliere/spledy/.yanga/build/Disco/arduino_uno_r3/compile_commands.json")
+    compilation_db = Path("C:/temp/sensor_app/build/compile_commands.json")
+    result = runner.invoke(
+        app,
+        [
+            "analyze",
+            "--compilation-database",
+            compilation_db.as_posix(),
+            "--output-file",
+            html_report.as_posix(),
+            # "--use-parent-deps",
+        ],
+    )
+    assert result.exit_code == 0
