@@ -223,7 +223,7 @@ def test_create_objects_report_data_tree(object_report_data_list: list[ObjectRep
 
 
 def test_create_objects_graph_data_nodes(object_report_data_list: list[ObjectReportData]) -> None:
-    nodes = create_objects_graph_data_nodes(create_objects_report_data_tree(object_report_data_list), {})
+    nodes = create_objects_graph_data_nodes(create_objects_report_data_tree(object_report_data_list), {}, exclude_isolated_objects=False)
     # Assert
     assert len(nodes) == 8
     assert {node.data.label for node in nodes} == {

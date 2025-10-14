@@ -156,6 +156,7 @@ def analyze(
     use_parent_deps: bool = typer.Option(True, help="Use parent dependencies."),
     create_traceability_matrix: bool = typer.Option(False, help="Create object dependencies traceability matrix."),
     exclude_symbol_pattern: list[str] = typer.Option(None, help="Symbol patterns to exclude from analysis (glob). Can be used multiple times."),  # noqa: B008
+    exclude_isolated_objects: bool = typer.Option(True, help="Exclude isolated object files with no dependencies."),
 ) -> None:
     compilation_database_data = CompilationDatabase.from_json_file(compilation_database)
     object_files = compilation_database_data.get_output_files()
@@ -178,7 +179,7 @@ def analyze(
         ObjectsDataExcelReportGenerator(objects_report_data, use_parent_deps=use_parent_deps, create_traceability_matrix=create_traceability_matrix).generate_report(output_file)
         logger.info("Dependencies report generated in Excel format.")
     else:
-        ObjectsDependenciesReportGenerator(objects_report_data, use_parent_deps=use_parent_deps).generate_report(output_file)
+        ObjectsDependenciesReportGenerator(objects_report_data, use_parent_deps=use_parent_deps, exclude_isolated_objects=exclude_isolated_objects).generate_report(output_file)
         logger.info("Dependencies report generated.")
 
 

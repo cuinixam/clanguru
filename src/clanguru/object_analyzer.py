@@ -278,7 +278,9 @@ class ObjectsGraphData(DataClassDictMixin):
 
 
 @time_it("create_objects_graph_data_nodes")
-def create_objects_graph_data_nodes(object_tree: ObjectReportDataTree, node_connections: dict[str, int], use_parent_deps: bool = True) -> list[ObjectsGraphDataNodes]:
+def create_objects_graph_data_nodes(
+    object_tree: ObjectReportDataTree, node_connections: dict[str, int], use_parent_deps: bool = True, exclude_isolated_objects: bool = True
+) -> list[ObjectsGraphDataNodes]:
     """
     Create graph data nodes from the object report data tree.
 
@@ -300,7 +302,7 @@ def create_objects_graph_data_nodes(object_tree: ObjectReportDataTree, node_conn
                     id=node.path.rel_path.as_posix() if node.path.rel_path else node.name,
                     label=node.name,
                     parent=parent_name if use_parent_deps else None,
-                    size=10,
+                    size=0,
                 )
                 nodes.append(ObjectsGraphDataNodes(data=dir_node_data))
                 current_parent = node.id
@@ -314,13 +316,17 @@ def create_objects_graph_data_nodes(object_tree: ObjectReportDataTree, node_conn
             # The ID the whole relative path of the object file
             id = obj.source_file.relative_to(node.path.root_path).as_posix() if node.path.root_path else obj_file_name
 
+            node_size = node_connections.get(id, 0)
+            # Skip isolated objects if the option is set
+            if exclude_isolated_objects and node_size == 0:
+                continue
             obj_node_data = ObjectsGraphDataNodesData(
                 content=label,
                 font_size=10,
                 id=id,
                 label=label,
                 parent=current_parent if use_parent_deps else None,
-                size=5 + node_connections.get(id, 0) * 2,  # Scaling based on connections
+                size=5 + node_size * 2,  # Scaling based on connections
             )
             nodes.append(ObjectsGraphDataNodes(data=obj_node_data))
 
@@ -500,9 +506,11 @@ class ObjectsDependenciesReportGenerator:
         self,
         objects_data: list[ObjectReportData],
         use_parent_deps: bool = False,
+        exclude_isolated_objects: bool = True,
     ):
         self.objects_data = objects_data
         self.use_parent_deps = use_parent_deps
+        self.exclude_isolated_objects = exclude_isolated_objects
 
     def generate_report(self, output_file: Path) -> None:
         """Generates the HTML report by rendering the Jinja2 template with the graph data."""
@@ -521,7 +529,7 @@ class ObjectsDependenciesReportGenerator:
         objects = self.objects_data
         objects_report_data_tree = create_objects_report_data_tree(objects)
         edges, nodes_connections = create_objects_graph_data_edges(objects)
-        nodes = create_objects_graph_data_nodes(objects_report_data_tree, nodes_connections, self.use_parent_deps)
+        nodes = create_objects_graph_data_nodes(objects_report_data_tree, nodes_connections, self.use_parent_deps, self.exclude_isolated_objects)
         return ObjectsGraphData(edges=edges, nodes=nodes)
 
 
