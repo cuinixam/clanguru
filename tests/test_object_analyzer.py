@@ -104,9 +104,9 @@ def create_object_report_data(file_name: str, symbols: list[Symbol], rel_path: s
 
 
 @pytest.fixture
-def object_report_data_list() -> list[ObjectReportData]:
-    project_directory = Path("C:/temp/my/project")
-    return [
+def object_report_data_list(tmp_path: Path) -> tuple[Path, list[ObjectReportData]]:
+    project_directory = tmp_path / "my" / "project"
+    object_report_data = [
         ObjectReportData(
             object_dependencies=ObjectDependencies(path=project_directory / "build/components/comp_a/src/CMakeFiles/comp_a.o", symbols=[]),
             compile_command=CompileCommand(
@@ -148,11 +148,12 @@ def object_report_data_list() -> list[ObjectReportData]:
             ),
         ),
     ]
+    return project_directory, object_report_data
 
 
-def test_create_objects_report_data_tree(object_report_data_list: list[ObjectReportData]) -> None:
+def test_create_objects_report_data_tree(object_report_data_list: tuple[Path, list[ObjectReportData]]) -> None:
     # Define a list of object report data based on the user's example
-    objects = object_report_data_list
+    project_directory, objects = object_report_data_list
 
     # Generate the tree
     full_tree = create_objects_report_data_tree_expanded(objects)
@@ -164,7 +165,7 @@ def test_create_objects_report_data_tree(object_report_data_list: list[ObjectRep
     # Check components subtree
     components_node = next(child for child in full_tree.children if child.name == "components")
     assert components_node.path.rel_path == Path("components")
-    assert components_node.path.full_path == Path("C:/temp/my/project/components")
+    assert components_node.path.full_path == project_directory / "components"
     assert {"comp_a", "comp_b"} == {child.name for child in components_node.children}
     comp_a_node = next(child for child in components_node.children if child.name == "comp_a")
     assert len(comp_a_node.objects) == 0
@@ -203,8 +204,8 @@ def test_create_objects_report_data_tree(object_report_data_list: list[ObjectRep
     # Check components subtree
     components_node = next(child for child in collapsed_tree.children if child.name == "components")
     assert components_node.path.rel_path == Path("components")
-    assert components_node.path.full_path == Path("C:/temp/my/project/components")
-    assert components_node.path.root_path == Path("C:/temp/my/project")
+    assert components_node.path.full_path == project_directory / "components"
+    assert components_node.path.root_path == project_directory
     assert len(components_node.children) == 0
     assert len(components_node.objects) == 2
     assert {obj.compile_command.file.name for obj in components_node.objects} == {"comp_a.c", "comp_b.c"}
@@ -217,13 +218,14 @@ def test_create_objects_report_data_tree(object_report_data_list: list[ObjectRep
     assert len(drivers_node.children) == 0
     assert len(drivers_node.objects) == 2
     assert drivers_node.path.rel_path == Path("mcal/src/drivers/src")
-    assert drivers_node.path.full_path == Path("C:/temp/my/project/mcal/src/drivers/src")
-    assert drivers_node.path.root_path == Path("C:/temp/my/project")
+    assert drivers_node.path.full_path == project_directory / "mcal/src/drivers/src"
+    assert drivers_node.path.root_path == project_directory
     assert {obj.compile_command.file.name for obj in drivers_node.objects} == {"adc.c", "io.c"}
 
 
-def test_create_objects_graph_data_nodes(object_report_data_list: list[ObjectReportData]) -> None:
-    nodes = create_objects_graph_data_nodes(create_objects_report_data_tree(object_report_data_list), {}, exclude_isolated_objects=False)
+def test_create_objects_graph_data_nodes(object_report_data_list: tuple[Path, list[ObjectReportData]]) -> None:
+    _, objects = object_report_data_list
+    nodes = create_objects_graph_data_nodes(create_objects_report_data_tree(objects), {}, exclude_isolated_objects=False)
     # Assert
     assert len(nodes) == 8
     assert {node.data.label for node in nodes} == {
