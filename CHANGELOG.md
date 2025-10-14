@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.14.0 (2025-10-14)
+
+### Features
+
+- Add option to exclude irrelevant objects
+  ([`22cccda`](https://github.com/cuinixam/clanguru/commit/22cccdab6beac525a1c27a2f1fd3080524f55644))
+
+- Display source files in the object analysis html report
+  ([`2d4c27d`](https://github.com/cuinixam/clanguru/commit/2d4c27d9a2c5f48a2abe4ed3bb34a4749ee1ef24))
+
+
 ## v0.13.1 (2025-10-02)
 
 ### Bug Fixes
