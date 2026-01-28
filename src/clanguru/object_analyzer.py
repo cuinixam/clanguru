@@ -272,9 +272,19 @@ class ObjectsGraphDataNodes(DataClassDictMixin):
 
 
 @dataclass
+class ObjectsGraphDataTreeNode(DataClassDictMixin):
+    """Tree node for the directory filter panel in the HTML visualization."""
+
+    id: str
+    name: str
+    children: list["ObjectsGraphDataTreeNode"] = field(default_factory=list)
+
+
+@dataclass
 class ObjectsGraphData(DataClassDictMixin):
     edges: list[ObjectsGraphDataEdges]
     nodes: list[ObjectsGraphDataNodes]
+    tree: list[ObjectsGraphDataTreeNode]
 
 
 @time_it("create_objects_graph_data_nodes")
@@ -501,6 +511,89 @@ def create_report_data(compilation_database: CompilationDatabase, object_data: l
     return report_data
 
 
+@time_it("create_filter_tree")
+def create_filter_tree(object_tree: ObjectReportDataTree) -> list[ObjectsGraphDataTreeNode]:
+    """
+    Create a tree structure for the frontend filter panel.
+
+    Convert ObjectReportDataTree to ObjectsGraphDataTreeNode structure.
+    """
+
+    def convert_node(node: ObjectReportDataTree) -> ObjectsGraphDataTreeNode | None:
+        # Skip root node if it has no name, but process its children
+        if node.name is None:
+            return None
+
+        # Create node for current directory/component
+        tree_node = ObjectsGraphDataTreeNode(
+            id=node.path.rel_path.as_posix() if node.path.rel_path else node.name,
+            name=node.name,
+        )
+
+        # Process children directories
+        for child in node.children:
+            child_node = convert_node(child)
+            if child_node:
+                tree_node.children.append(child_node)
+
+        return tree_node
+
+    result = []
+    # Handle root node specifically - we want its children as top-level items
+    if object_tree.name is None:
+        # Handle directories
+        for child in object_tree.children:
+            child_node = convert_node(child)
+            if child_node:
+                result.append(child_node)
+
+        # Handle root-level files
+        for obj in object_tree.objects:
+            # Create a leaf node for the file
+            # We use the relative path (if available) or name for ID, similar to directories but objects logic might be slightly different.
+            # Nodes in graph use 'id' from create_objects_graph_data_nodes which uses object_data.object_dependencies.name or similar?
+            # Let's check create_objects_graph_data_nodes logic for regular objects.
+            # It uses: id=str(obj.object_file.relative_to(root_path)) usually.
+
+            # Here we have ObjectReportData.
+            # We need to construct the ID that matches what's in the graph.
+            # In create_objects_graph_data_nodes:
+            # id = str(obj.object_file.relative_to(project_root))
+            # In ObjectReportDataTree, we don't readily have the project root in convert_node scope easily?
+            # But 'obj.object_file' is absolute path?
+            # Wait, ObjectReportData has 'object_file' property.
+
+            # Actually, simpler: create_filter_tree logic relies on ObjectReportDataTree structure.
+            # For directories, it uses node.path.rel_path.
+            # For objects, we should use similar.
+            # But objects don't wrap in ObjectReportDataTree usually? They are in 'objects' list.
+
+            # Let's assume the ID used in graph equals the relative path string.
+            # We can get it from obj.object_file (Path) relative to... ?
+            # We assume create_filter_tree is called on the root tree.
+            # 'object_tree.path.root_path' should be the project root?
+
+            root_path = object_tree.path.root_path
+            try:
+                rel_path = obj.object_file.relative_to(root_path).as_posix()
+            except ValueError:
+                rel_path = obj.name
+
+            result.append(ObjectsGraphDataTreeNode(id=rel_path, name=obj.name, children=[]))
+
+    else:
+        # If root has a name (unlikely for project root but possible), include it
+        root_node = convert_node(object_tree)
+        if root_node:
+            result.append(root_node)
+
+    return result
+
+
+def get_html_template_path() -> Path:
+    return Path(__file__).parent / "object_analyzer.html.jinja"
+
+
 class ObjectsDependenciesReportGenerator:
     def __init__(
         self,
@@ -516,8 +609,9 @@ class ObjectsDependenciesReportGenerator:
         """Generates the HTML report by rendering the Jinja2 template with the graph data."""
         graph_data = self.generate_graph_data()
 
-        env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
-        template = env.get_template("object_analyzer.html.jinja")
+        template_path = get_html_template_path()
+        env = Environment(loader=FileSystemLoader(template_path.parent), autoescape=True)
+        template = env.get_template(template_path.name)
         rendered_html = template.render(graph_data=graph_data.to_dict())
 
         # Write the rendered HTML to the output file
@@ -530,7 +624,8 @@ class ObjectsDependenciesReportGenerator:
         objects_report_data_tree = create_objects_report_data_tree(objects)
         edges, nodes_connections = create_objects_graph_data_edges(objects)
         nodes = create_objects_graph_data_nodes(objects_report_data_tree, nodes_connections, self.use_parent_deps, self.exclude_isolated_objects)
-        return ObjectsGraphData(edges=edges, nodes=nodes)
+        filter_tree = create_filter_tree(objects_report_data_tree)
+        return ObjectsGraphData(edges=edges, nodes=nodes, tree=filter_tree)
 
 
 class ExcelColumnMapper:

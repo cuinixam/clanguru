@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 
 <head>
+    <meta charset="utf-8">
     <script>
         var MY_GRAPH_DATA = {{ graph_data | tojson(indent = 4) }};
     </script>
@@ -14,6 +15,15 @@
             font-size: 12px;
             margin: 0;
             padding: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #main-container {
+            position: relative;
+            flex-grow: 1;
+            height: 100%;
         }
 
         #search-container {
@@ -75,12 +85,114 @@
         }
 
         #cy {
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            right: 0;
+            width: 100%;
+            height: 100%;
             z-index: 1;
+        }
+
+        /* Filter Panel Styles */
+        #filter-panel {
+            width: 300px;
+            background: #f8f9fa;
+            border-left: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            z-index: 2;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.05);
+        }
+
+        #filter-header {
+            padding: 15px;
+            background: #e9ecef;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #filter-header h2 {
+            margin: 0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        #filter-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .tree-node {
+            margin-left: 20px;
+        }
+
+        /* Root nodes don't need margin */
+        #tree-root > .tree-node {
+            margin-left: 0;
+        }
+
+        .node-content {
+            display: flex;
+            align-items: center;
+            padding: 2px 0;
+        }
+
+        .node-content:hover {
+            background-color: #e2e6ea;
+            border-radius: 3px;
+        }
+
+        .toggle-btn {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 5px;
+            color: #6c757d;
+            font-weight: bold;
+            user-select: none;
+        }
+
+        .toggle-btn:hover {
+            color: #333;
+        }
+
+        .checkbox {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .node-label {
+            cursor: pointer;
+            user-select: none;
+            color: #333;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #filter-controls {
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+        }
+
+        .control-btn {
+            flex: 1;
+            padding: 5px;
+            font-size: 11px;
+            cursor: pointer;
+            background: #fff;
+            border: 1px solid #ced4da;
+            border-radius: 3px;
+        }
+
+        .control-btn:hover {
+            background: #f1f3f5;
         }
 
         h1 {
@@ -91,16 +203,36 @@
 </head>
 
 <body>
-    <div id="search-container">
-        <input type="text" id="search-input" placeholder="Search nodes by name..." />
-        <button id="clear-search">Clear</button>
-        <button id="reset-zoom">Reset Zoom</button>
-        <div id="search-results"></div>
+    <div id="main-container">
+        <div id="search-container">
+            <input type="text" id="search-input" placeholder="Search nodes by name..." />
+            <button id="clear-search">Clear</button>
+            <button id="reset-zoom">Reset Zoom</button>
+            <div id="search-results"></div>
+        </div>
+        <div id="cy"></div>
     </div>
-    <div id="cy"></div>
+
+    <div id="filter-panel">
+        <div id="filter-header">
+            <h2>Directory Filter</h2>
+        </div>
+        <div id="filter-controls">
+            <button class="control-btn" id="expand-all">Expand All</button>
+            <button class="control-btn" id="collapse-all">Collapse All</button>
+            <button class="control-btn" id="check-all">Check All</button>
+            <button class="control-btn" id="uncheck-all">Uncheck All</button>
+        </div>
+        <div id="filter-content">
+            <div id="tree-root"></div>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            console.log(JSON.stringify(MY_GRAPH_DATA));
+            // console.log(JSON.stringify(MY_GRAPH_DATA));
+
+            // Initialize Cytoscape
             var cy = window.cy = cytoscape({
                 container: document.getElementById('cy'),
                 autounselectify: true,
@@ -133,10 +265,19 @@
                         }
                     },
                     {
-                        selector: 'node.dimmed',
                         css: {
                             'background-color': '#cccccc',
-                            'opacity': 0.3
+                            'background-opacity': 0.4,
+                            'border-opacity': 0.4,
+                            'color': '#555555',
+                            'text-opacity': 1,
+                            'opacity': 1
+                        }
+                    },
+                    {
+                        selector: 'node.filtered-out',
+                        css: {
+                            'display': 'none'
                         }
                     },
                     {
@@ -167,13 +308,218 @@
                         css: {
                             'opacity': 0.2
                         }
+                    },
+                    {
+                        selector: 'edge.filtered-out',
+                        css: {
+                            'display': 'none'
+                        }
                     }
                 ],
                 elements: MY_GRAPH_DATA,
                 zoomingEnabled: true
             });
 
-            // Search functionality
+            // ---------------------------------------------------------
+            // Filter Tree Logic
+            // ---------------------------------------------------------
+            const treeRoot = document.getElementById('tree-root');
+            const hiddenNodeIds = new Set();
+
+            // Build the filter tree
+            function buildFilterTree(nodes, container) {
+                if (!nodes || nodes.length === 0) return;
+
+                const ul = document.createElement('div');
+                ul.className = 'tree-level';
+
+                nodes.forEach(node => {
+                    const nodeWrapper = document.createElement('div');
+                    nodeWrapper.className = 'tree-node';
+
+                    const content = document.createElement('div');
+                    content.className = 'node-content';
+
+                    // Toggle button (chevron)
+                    const toggleBtn = document.createElement('span');
+                    toggleBtn.className = 'toggle-btn';
+                    toggleBtn.innerHTML = node.children && node.children.length > 0 ? '▶' : ''; // Collapsed by default
+
+                    // Checkbox
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'checkbox';
+                    checkbox.checked = true;
+                    checkbox.dataset.nodeId = node.id;
+                    checkbox.dataset.nodeName = node.name;
+
+                    // Label
+                    const label = document.createElement('span');
+                    label.className = 'node-label';
+                    label.textContent = node.name;
+
+                    content.appendChild(toggleBtn);
+                    content.appendChild(checkbox);
+                    content.appendChild(label);
+                    nodeWrapper.appendChild(content);
+
+                    // Children container
+                    const childrenContainer = document.createElement('div');
+                    childrenContainer.className = 'tree-children';
+                    childrenContainer.style.display = 'none'; // Default collapsed
+
+                    if (node.children && node.children.length > 0) {
+                        buildFilterTree(node.children, childrenContainer);
+
+                        // Toggle collapse/expand
+                        const toggleHandler = (e) => {
+                            e.stopPropagation();
+                            if (childrenContainer.style.display === 'none') {
+                                childrenContainer.style.display = 'block';
+                                toggleBtn.innerHTML = '▼';
+                            } else {
+                                childrenContainer.style.display = 'none';
+                                toggleBtn.innerHTML = '▶';
+                            }
+                        };
+                        toggleBtn.addEventListener('click', toggleHandler);
+                    }
+
+                    nodeWrapper.appendChild(childrenContainer);
+                    container.appendChild(nodeWrapper);
+
+                     // Checkbox handler
+                    checkbox.addEventListener('change', function(e) {
+                         // Propagate to all children checkboxes in DOM
+                         // Only propagate if this was a user interaction (which 'change' implies)
+                         const childCheckboxes = childrenContainer.querySelectorAll('input[type="checkbox"]');
+                         childCheckboxes.forEach(cb => {
+                             cb.checked = checkbox.checked;
+                         });
+
+                         // If checked, ensure all ancestors are also checked
+                         if (checkbox.checked) {
+                             checkAncestors(checkbox);
+                         }
+
+                         updateGraphVisibility();
+                    });
+                });
+
+                container.appendChild(ul);
+            }
+
+            // Function to check ancestor checkboxes recursively
+            function checkAncestors(checkbox) {
+                // hierarchy: input -> div.node-content -> div.tree-node -> div.tree-children -> div.tree-node(parent)
+                const currentTreeNode = checkbox.closest('.tree-node');
+                if (!currentTreeNode) return;
+
+                const parentContainer = currentTreeNode.closest('.tree-children');
+                if (!parentContainer) return; // Root level
+
+                const parentTreeNode = parentContainer.closest('.tree-node');
+                if (!parentTreeNode) return;
+
+                const parentContent = parentTreeNode.querySelector('.node-content');
+                if (!parentContent) return;
+
+                const parentCheckbox = parentContent.querySelector('.checkbox');
+                if (parentCheckbox && !parentCheckbox.checked) {
+                    parentCheckbox.checked = true;
+                    checkAncestors(parentCheckbox);
+                }
+            }
+
+            if (MY_GRAPH_DATA.tree) {
+                buildFilterTree(MY_GRAPH_DATA.tree, treeRoot);
+            }
+
+            // Debounce function for performance
+            function debounce(func, wait) {
+                let timeout;
+                return function() {
+                    const context = this, args = arguments;
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(context, args), wait);
+                };
+            }
+
+            const updateGraphVisibility = debounce(function() {
+                // 1. Collect all unchecked directory IDs (from the tree)
+                // We'll traverse the DOM tree actually, since it maps 1:1 to structure
+                // But simpler: just get all unchecked checkboxes and find their corresponding graph nodes
+
+                const allCheckboxes = document.querySelectorAll('.checkbox');
+                const uncheckedIds = new Set();
+                const checkedIds = new Set();
+
+                allCheckboxes.forEach(cb => {
+                    const id = cb.dataset.nodeId;
+                    if (!cb.checked) {
+                        uncheckedIds.add(id);
+                    } else {
+                        checkedIds.add(id);
+                    }
+                });
+
+                cy.batch(() => {
+                    // Reset all first
+                    cy.elements().removeClass('filtered-out');
+
+                    // Logic:
+                    // A node in the graph (file or dir) matches a tree node by ID (relative path).
+                    // Also, file nodes are children of directory nodes in the graph (parent field).
+
+                    // 1. Hide directory nodes that are explicitly unchecked
+                    uncheckedIds.forEach(dirId => {
+                         // Find the node in Cytoscape
+                         const node = cy.getElementById(dirId);
+                         if (node.nonempty()) {
+                             node.addClass('filtered-out');
+                             // Also hide all descendants (children, grandchildren, etc.)
+                             node.descendants().addClass('filtered-out');
+                         }
+                    });
+
+                    // 2. Hide edges connected to hidden nodes automatically happens visually if nodes are hidden?
+                    // Cytoscape doesn't auto-hide edges if nodes are hidden via class/css usually.
+                    // Actually, modifying 'display: none' on node hides connected edges too in Cytoscape.
+
+                    // However, we might have edges explicitly between visible nodes that we want to keep.
+                    // If a node is 'filtered-out', its edges are naturally hidden.
+                    // So we mostly just need to target the nodes correctly.
+                });
+            }, 100);
+
+            // Filter Controls
+            document.getElementById('expand-all').addEventListener('click', () => {
+                document.querySelectorAll('.tree-children').forEach(el => el.style.display = 'block');
+                document.querySelectorAll('.toggle-btn').forEach(btn => {
+                    if (btn.innerText) btn.innerText = '▼';
+                });
+            });
+
+            document.getElementById('collapse-all').addEventListener('click', () => {
+                document.querySelectorAll('.tree-children').forEach(el => el.style.display = 'none');
+                document.querySelectorAll('.toggle-btn').forEach(btn => {
+                    if (btn.innerText) btn.innerText = '▶';
+                });
+            });
+
+            document.getElementById('check-all').addEventListener('click', () => {
+                 document.querySelectorAll('.checkbox').forEach(cb => cb.checked = true);
+                 updateGraphVisibility();
+            });
+
+            document.getElementById('uncheck-all').addEventListener('click', () => {
+                 document.querySelectorAll('.checkbox').forEach(cb => cb.checked = false);
+                 updateGraphVisibility();
+            });
+
+            // ---------------------------------------------------------
+            // Existing Search functionality (kept as is)
+            // ---------------------------------------------------------
             const searchInput = document.getElementById('search-input');
             const searchResults = document.getElementById('search-results');
             const clearButton = document.getElementById('clear-search');
@@ -181,8 +527,10 @@
             let currentMatches = [];
 
             function getAllNodes() {
+                // Return only visible nodes for search? Or all?
+                // Let's filter by validity first
                 return cy.nodes().filter(function(node) {
-                    return !node.isParent();
+                    return !node.isParent() && !node.hasClass('filtered-out'); // Search only visible leaf nodes
                 });
             }
 
@@ -216,12 +564,16 @@
                 nodes.addClass('highlighted');
 
                 // Get all edges connected to the highlighted nodes
-                const connectedEdges = nodes.connectedEdges();
+                const connectedEdges = nodes.connectedEdges().filter(e => !e.hasClass('filtered-out'));
                 connectedEdges.addClass('highlighted');
 
                 // Dim non-matching nodes and edges
-                getAllNodes().difference(nodes).addClass('dimmed');
-                cy.edges().difference(connectedEdges).addClass('dimmed');
+                // Only consider visible nodes
+                const visibleNodes = cy.nodes().not('.filtered-out');
+                visibleNodes.difference(nodes).addClass('dimmed');
+
+                const visibleEdges = cy.edges().not('.filtered-out');
+                visibleEdges.difference(connectedEdges).addClass('dimmed');
 
                 // Center on first match if there are results
                 if (nodes.length > 0) {
@@ -235,9 +587,11 @@
                 searchResults.style.display = 'none';
                 cy.nodes().removeClass('highlighted dimmed');
                 cy.edges().removeClass('highlighted dimmed');
-                cy.fit();
+                // Fit only visible nodes (edges might not be marked filtered-out but are hidden if nodes are)
+                cy.fit(cy.nodes().not('.filtered-out'));
                 currentMatches = [];
             }
+
 
             function updateSearchResults(matches) {
                 searchResults.innerHTML = '';
@@ -280,8 +634,7 @@
             clearButton.addEventListener('click', clearSearch);
 
             resetZoomButton.addEventListener('click', function() {
-                cy.fit();
-                cy.center();
+                cy.fit(cy.nodes().not('.filtered-out'));
             });
 
             // Hide search results when clicking outside

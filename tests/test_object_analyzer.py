@@ -10,6 +10,7 @@ from clanguru.object_analyzer import (
     Symbol,
     SymbolLinkage,
     collapse_objects_report_data_tree,
+    create_filter_tree,
     create_objects_graph_data_nodes,
     create_objects_report_data_tree,
     create_objects_report_data_tree_expanded,
@@ -249,3 +250,31 @@ def test_create_objects_graph_data_nodes(object_report_data_list: tuple[Path, li
         "mcal/src/drivers/src/adc.c",
         "mcal/src/drivers/src/io.c",
     }
+
+
+def test_create_filter_tree(object_report_data_list: tuple[Path, list[ObjectReportData]]) -> None:
+    _, objects = object_report_data_list
+    object_tree = create_objects_report_data_tree(objects)
+
+    # Generate the filter tree
+    filter_tree = create_filter_tree(object_tree)
+
+    # Assert root level
+    assert len(filter_tree) == 2
+    root_names = {node.name for node in filter_tree}
+    assert root_names == {"components", "mcal/src"}
+
+    # Check components subtree
+    components_node = next(node for node in filter_tree if node.name == "components")
+    assert components_node.id == "components"
+    assert len(components_node.children) == 0  # In collapsed tree, components has no children dirs, just objects (which aren't in filter tree)
+
+    # Check mcal subtree
+    mcal_node = next(node for node in filter_tree if node.name == "mcal/src")
+    assert mcal_node.id == "mcal/src"
+    assert len(mcal_node.children) == 1
+
+    drivers_node = mcal_node.children[0]
+    assert drivers_node.name == "drivers/src"
+    assert drivers_node.id == "mcal/src/drivers/src"
+    assert len(drivers_node.children) == 0
