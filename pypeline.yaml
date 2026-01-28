@@ -1,9 +1,17 @@
+inputs:
+  python_version:
+    type: string
+    description: Specify python version for bootstrap
+    default:
+
 pipeline:
   - step: CreateVEnv
     module: pypeline.steps.create_venv
     config:
-      package_manager: uv>=0.6
-      python_executable: python3
+      package_manager: uv>=0
+      python_version: 3.13
+  - step: GenerateEnvSetupScript
+    module: pypeline.steps.env_setup_script
   - step: PreCommit
     run: pre-commit run --all-files
   - step: PyTest
