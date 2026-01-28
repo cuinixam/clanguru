@@ -26,63 +26,101 @@
             height: 100%;
         }
 
+        /* Shared Panel Styling */
+        .panel-style {
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+
         #search-container {
             position: absolute;
-            top: 10px;
-            left: 10px;
+            top: 20px;
+            left: 20px;
             z-index: 1000;
-            background: rgba(255, 255, 255, 0.9);
             padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap; /* Allow wrapping on small screens */
+            max-width: 90%;
         }
 
         #search-input {
-            padding: 5px 10px;
-            border: 1px solid #ccc;
-            border-radius: 3px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
             font-size: 14px;
-            width: 200px;
+            width: 220px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #search-input:focus {
+            border-color: #007bff;
         }
 
         #search-results {
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
             margin-top: 5px;
-            border: 1px solid #ccc;
-            border-radius: 3px;
+            border: 1px solid #eee;
+            border-radius: 4px;
             background: white;
             display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 1001;
         }
 
-        .search-result-item {
-            padding: 5px 10px;
+        /* Unified Button Styling */
+        .btn-tool {
+            padding: 0 12px;
+            height: 36px; /* Match input height */
+            background: #ffffff;
+            color: #495057;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
             cursor: pointer;
-            border-bottom: 1px solid #eee;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
 
-        .search-result-item:hover {
-            background-color: #f0f0f0;
+        .btn-tool:hover {
+            background: #f8f9fa;
+            border-color: #adb5bd;
+            color: #212529;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        .search-result-item:last-child {
-            border-bottom: none;
+        .btn-tool:active {
+            background: #e9ecef;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
         }
 
-        #clear-search, #reset-zoom {
-            margin-left: 5px;
-            padding: 5px 10px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 12px;
+        /* Icons in buttons */
+        .btn-icon {
+            font-size: 1.1em;
+            line-height: 1;
         }
 
-        #clear-search:hover, #reset-zoom:hover {
-            background: #0056b3;
+        /* Specific modifications */
+        #filter-toggle-btn {
+             /* Make the primary toggle slightly distinct but consistent in style */
+             font-weight: 600;
         }
+
 
         #cy {
             width: 100%;
@@ -92,28 +130,54 @@
 
         /* Filter Panel Styles */
         #filter-panel {
-            width: 300px;
-            background: #f8f9fa;
-            border-left: 1px solid #ddd;
+            width: 320px;
+            height: calc(100% - 40px); /* Full height minus margins */
+            position: absolute;
+            top: 20px;
+            right: 20px;
             display: flex;
             flex-direction: column;
-            z-index: 2;
-            box-shadow: -2px 0 5px rgba(0,0,0,0.05);
+            z-index: 999;
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform: translateX(0); /* Visible by default on desktop */
+            /* Removed background/border logic in favor of .panel-style */
+        }
+
+        #filter-panel.collapsed {
+            transform: translateX(calc(100% + 40px)); /* Slide out to right */
+            pointer-events: none; /* Prevent clicks when hidden */
         }
 
         #filter-header {
             padding: 15px;
-            background: #e9ecef;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid #eee;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            background: rgba(0,0,0,0.02);
+            border-radius: 8px 8px 0 0;
+        }
+
+        #close-filter {
+            background: transparent;
+            border: none;
+            color: #999;
+            font-size: 20px;
+            padding: 0;
+            width: auto;
+            height: auto;
+        }
+
+        #close-filter:hover {
+            color: #333;
+            background: transparent;
         }
 
         #filter-header h2 {
             margin: 0;
-            font-size: 14px;
+            font-size: 16px;
             color: #333;
+            font-weight: 600;
         }
 
         #filter-content {
@@ -121,6 +185,66 @@
             overflow-y: auto;
             padding: 10px;
         }
+
+        /* Mobile / Small Screen Responsiveness */
+        @media (max-width: 768px) {
+            #search-container {
+                top: 10px;
+                left: 10px;
+                right: 10px;
+                width: auto;
+                max-width: none;
+                justify-content: space-between;
+                padding: 8px;
+            }
+
+            #search-input {
+                flex-grow: 1;
+                width: auto; /* Let flex handle it */
+                min-width: 120px;
+            }
+
+            #clear-search, #reset-zoom, #help-btn {
+                padding: 8px; /* Reduce padding */
+            }
+
+            #search-results {
+                 position: fixed; /* Detach from container flow */
+                 top: 60px;
+                 left: 10px;
+                 right: 10px;
+                 width: auto;
+            }
+
+            #filter-panel {
+                position: fixed;
+                top: 0;
+                right: 0;
+                width: 85%; /* Take up most of the screen */
+                height: 100%;
+                border-radius: 0; /* Full height looks better squared */
+                transform: translateX(100%); /* Hidden by default mobile */
+                box-shadow: -2px 0 10px rgba(0,0,0,0.2);
+            }
+
+            #filter-panel.active {
+                transform: translateX(0);
+            }
+
+            /* Overlay when filter is open on mobile */
+            #mobile-overlay {
+                display: none;
+                position: fixed;
+                top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.3);
+                z-index: 998;
+            }
+
+            #mobile-overlay.active {
+                display: block;
+            }
+        }
+
 
         .tree-node {
             margin-left: 20px;
@@ -209,23 +333,23 @@
 
         /* Help Modal Styles */
         .modal {
-            display: none; 
-            position: fixed; 
-            z-index: 2000; 
+            display: none;
+            position: fixed;
+            z-index: 2000;
             left: 0;
             top: 0;
-            width: 100%; 
-            height: 100%; 
-            overflow: auto; 
-            background-color: rgba(0,0,0,0.4); 
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
         }
 
         .modal-content {
             background-color: #fefefe;
-            margin: 10% auto; 
+            margin: 10% auto;
             padding: 20px;
             border: 1px solid #888;
-            width: 80%; 
+            width: 80%;
             max-width: 600px;
             border-radius: 5px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
@@ -257,7 +381,7 @@
             border-bottom: 1px solid #eee;
             padding-bottom: 5px;
         }
-        
+
         #help-btn {
             margin-left: 5px;
             padding: 5px 10px;
@@ -277,20 +401,23 @@
 </head>
 
 <body>
+    <div id="mobile-overlay"></div>
     <div id="main-container">
-        <div id="search-container">
-            <input type="text" id="search-input" placeholder="Search nodes by name..." />
-            <button id="clear-search">Clear</button>
-            <button id="reset-zoom">Reset Zoom</button>
-            <button id="help-btn" title="Help / Usage Guide">?</button>
+        <div id="search-container" class="panel-style">
+            <input type="text" id="search-input" placeholder="Search..." />
+            <button id="clear-search" class="btn-tool" title="Clear Search"><span class="btn-icon">✕</span></button>
+            <button id="reset-zoom" class="btn-tool" title="Reset Graph Zoom"><span class="btn-icon">⟲</span> Reset Zoom</button>
+            <button id="help-btn" class="btn-tool" title="Help / Usage Guide"><span class="btn-icon">?</span> Help</button>
+            <button id="filter-toggle-btn" class="btn-tool" title="Toggle Directory Filter"><span class="btn-icon">☰</span> Filters</button>
             <div id="search-results"></div>
         </div>
         <div id="cy"></div>
     </div>
 
-    <div id="filter-panel">
+    <div id="filter-panel" class="panel-style">
         <div id="filter-header">
             <h2>Directory Filter</h2>
+            <button id="close-filter" title="Close Panel">✕</button>
         </div>
         <div id="filter-controls">
             <button class="control-btn" id="expand-all">Expand All</button>
@@ -308,7 +435,7 @@
         <div class="modal-content">
             <span class="close-modal">&times;</span>
             <h2>Object Analyzer Help</h2>
-            
+
             <div class="help-section">
                 <h3>🔍 Search</h3>
                 <p>Type in the search box to find specific nodes. Click a result to zoom and center on it.</p>
@@ -492,7 +619,7 @@
                 let targetId = node.id();
 
                 // Find the corresponding checkbox in the tree
-                // Strategy: 
+                // Strategy:
                 // 1. Try to find the node itself (it might be a directory)
                 // 2. If not found, check if it has a parent in the graph (it might be a file inside a dir)
                 // 3. Fallback to manually checking parent field from data if Cytoscape parent() not set yet (unlikely)
@@ -527,16 +654,33 @@
                         parent = parent.parentElement.closest('.tree-children');
                     }
 
-                    // 2. Highlight text
+                    // 2. Ensure Panel is Open (Fix for bug where view shifts)
+                    const filterPanel = document.getElementById('filter-panel');
+                    const mobileOverlay = document.getElementById('mobile-overlay');
+                    // Simple check similar to toggle logic
+                    if (window.innerWidth <= 768) {
+                        filterPanel.classList.add('active');
+                        if (mobileOverlay) mobileOverlay.classList.add('active');
+                        filterPanel.classList.remove('collapsed');
+                    } else {
+                        filterPanel.classList.remove('collapsed');
+                    }
+                    // Trigger resize to ensure graph doesn't get distorted if panel displaces it
+                    setTimeout(() => cy.resize(), 305);
+
+                    // 3. Highlight text
                     // Remove existing highlights
                     document.querySelectorAll('.tree-highlight').forEach(el => el.classList.remove('tree-highlight'));
-                    
+
                     const nodeContent = checkbox.closest('.node-content');
                     if (nodeContent) {
                         nodeContent.classList.add('tree-highlight');
-                        
-                        // 3. Scroll into view
-                        nodeContent.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                        // 4. Scroll into view
+                        // Wait slightly for transition to start/panel to become visible
+                        setTimeout(() => {
+                             nodeContent.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 100);
                     }
                 }
             });
@@ -864,6 +1008,52 @@
                     searchResults.style.display = 'none';
                 }
             });
+
+            // ---------------------------------------------------------
+            // UI Toggles (Filter Panel)
+            // ---------------------------------------------------------
+            const filterPanel = document.getElementById('filter-panel');
+            const filterToggleBtn = document.getElementById('filter-toggle-btn');
+            const closeFilterBtn = document.getElementById('close-filter');
+            const mobileOverlay = document.getElementById('mobile-overlay');
+
+            function toggleFilterPanel() {
+                // Check if mobile (by checking media query or computed style, but class logic works)
+                const isMobile = window.innerWidth <= 768;
+
+                if (isMobile) {
+                    filterPanel.classList.toggle('active'); // Use active for mobile transform
+                    mobileOverlay.classList.toggle('active');
+                    filterPanel.classList.remove('collapsed'); // Ensure it's not strictly collapsed
+                } else {
+                    filterPanel.classList.toggle('collapsed');
+                }
+
+                // Resize graph after transition to fill space if needed
+                setTimeout(() => cy.resize(), 305);
+            }
+
+            function closeFilter() {
+                 const isMobile = window.innerWidth <= 768;
+                 if(isMobile) {
+                     filterPanel.classList.remove('active');
+                     mobileOverlay.classList.remove('active');
+                 } else {
+                     filterPanel.classList.add('collapsed');
+                 }
+                 setTimeout(() => cy.resize(), 305);
+            }
+
+            filterToggleBtn.addEventListener('click', toggleFilterPanel);
+            closeFilterBtn.addEventListener('click', closeFilter);
+            if (mobileOverlay) mobileOverlay.addEventListener('click', closeFilter);
+
+            // Initial state: On mobile, hidden. On desktop, visible.
+            // Our CSS default handles desktop visible.
+            // Depending on screen width, we might want to auto-collapse on small desktops?
+            if (window.innerWidth < 1000) {
+                 filterPanel.classList.add('collapsed');
+            }
 
             // ---------------------------------------------------------
             // Help Modal Logic
