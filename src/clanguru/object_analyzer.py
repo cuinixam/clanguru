@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import fnmatch
 import os
 import re
@@ -7,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 from mashumaro import DataClassDictMixin
@@ -98,7 +100,7 @@ class ObjectReportDataTree:
 
     name: str | None
     path: ObjectReportDataPath
-    children: list["ObjectReportDataTree"] = field(default_factory=list)
+    children: list[ObjectReportDataTree] = field(default_factory=list)
     objects: list[ObjectReportData] = field(default_factory=list)
 
     @property
@@ -263,7 +265,7 @@ class ObjectsGraphDataNodesData(DataClassDictMixin):
     id: str
     label: str
     size: int
-    parent: Optional[str] = None
+    parent: str | None = None
 
 
 @dataclass
@@ -277,7 +279,7 @@ class ObjectsGraphDataTreeNode(DataClassDictMixin):
 
     id: str
     name: str
-    children: list["ObjectsGraphDataTreeNode"] = field(default_factory=list)
+    children: list[ObjectsGraphDataTreeNode] = field(default_factory=list)
 
 
 @dataclass
@@ -301,7 +303,7 @@ def create_objects_graph_data_nodes(
 
     def traverse_tree(node: ObjectReportDataTree, parent_name: str | None = None) -> None:
         """Recursively traverse the tree and create graph nodes."""
-        current_parent: Optional[str] = None
+        current_parent: str | None = None
         if use_parent_deps:
             # Skip root node (name is None)
             if node.name is not None:
@@ -421,7 +423,7 @@ class NmExecutor:
         return obj_data
 
     @staticmethod
-    def get_symbol(nm_symbol_output: str) -> Optional[Symbol]:
+    def get_symbol(nm_symbol_output: str) -> Symbol | None:
         # Regex to capture optional address, mandatory uppercase symbol type, and symbol name
         # Group 1: Symbol Type Letter (e.g., 'U', 'T', 'D', 'B', etc.)
         # Group 2: Symbol Name
@@ -440,7 +442,7 @@ class NmExecutor:
         return None
 
 
-def parse_objects(obj_files: list[Path], max_workers: Optional[int] = None) -> list[ObjectDependencies]:
+def parse_objects(obj_files: list[Path], max_workers: int | None = None) -> list[ObjectDependencies]:
     """Run the nm executor on each object file in parallel, collecting all the resulting ObjectData in the same order as `obj_files`."""
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         # executor.map preserves input order in its output sequence
