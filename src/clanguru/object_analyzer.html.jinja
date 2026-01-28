@@ -206,6 +206,73 @@
             border-radius: 3px;
             transition: background-color 0.5s;
         }
+
+        /* Help Modal Styles */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 2000; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.4); 
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto; 
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%; 
+            max-width: 600px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .close-modal {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-modal:hover,
+        .close-modal:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .help-section {
+            margin-bottom: 20px;
+        }
+
+        .help-section h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        
+        #help-btn {
+            margin-left: 5px;
+            padding: 5px 10px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        #help-btn:hover {
+            background: #5a6268;
+        }
     </style>
 </head>
 
@@ -215,6 +282,7 @@
             <input type="text" id="search-input" placeholder="Search nodes by name..." />
             <button id="clear-search">Clear</button>
             <button id="reset-zoom">Reset Zoom</button>
+            <button id="help-btn" title="Help / Usage Guide">?</button>
             <div id="search-results"></div>
         </div>
         <div id="cy"></div>
@@ -232,6 +300,38 @@
         </div>
         <div id="filter-content">
             <div id="tree-root"></div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Object Analyzer Help</h2>
+            
+            <div class="help-section">
+                <h3>🔍 Search</h3>
+                <p>Type in the search box to find specific nodes. Click a result to zoom and center on it.</p>
+            </div>
+
+            <div class="help-section">
+                <h3>👆 Interaction</h3>
+                <ul>
+                    <li><strong>Select Edge:</strong> Click an edge to highlight it and its connected (source/target) nodes.</li>
+                    <li><strong>Select Node:</strong> Click a node to see a red border and highlight its immediate neighbors.</li>
+                    <li><strong>Double-Click Node:</strong> Finds the node (or its parent folder) in the <em>Directory Filter</em> tree on the right, expands the tree, and highlights the folder.</li>
+                    <li><strong>Clear Selection:</strong> Click on the background canvas.</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h3>📁 Directory Filter</h3>
+                <p>Use the panel on the right to toggle visibility of files and folders.</p>
+                <ul>
+                    <li><strong>Checkboxes:</strong> Hide/Show specific directories and their contents.</li>
+                    <li><strong>Buttons:</strong> Use "Expand All", "Collapse All", etc., to manage the tree view.</li>
+                </ul>
+            </div>
         </div>
     </div>
 
@@ -764,6 +864,27 @@
                     searchResults.style.display = 'none';
                 }
             });
+
+            // ---------------------------------------------------------
+            // Help Modal Logic
+            // ---------------------------------------------------------
+            const modal = document.getElementById("help-modal");
+            const btn = document.getElementById("help-btn");
+            const span = document.getElementsByClassName("close-modal")[0];
+
+            btn.onclick = function() {
+                modal.style.display = "block";
+            }
+
+            span.onclick = function() {
+                modal.style.display = "none";
+            }
+
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+            }
         });
     </script>
 </body>
