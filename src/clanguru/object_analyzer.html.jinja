@@ -199,6 +199,13 @@
             font-size: 1em;
             font-weight: bold;
         }
+
+        .tree-highlight {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 3px;
+            transition: background-color 0.5s;
+        }
     </style>
 </head>
 
@@ -235,7 +242,7 @@
             // Initialize Cytoscape
             var cy = window.cy = cytoscape({
                 container: document.getElementById('cy'),
-                autounselectify: true,
+                autounselectify: false,
                 boxSelectionEnabled: false,
                 layout: {
                     name: 'cola'
@@ -262,6 +269,13 @@
                             'border-width': 3,
                             'border-color': '#ff0000',
                             'color': 'white'
+                        }
+                    },
+                    {
+                        selector: 'node:selected',
+                        css: {
+                            'border-width': 4,
+                            'border-color': '#ff0000',
                         }
                     },
                     {
@@ -304,6 +318,16 @@
                         }
                     },
                     {
+                        selector: 'edge.neighbor-highlight',
+                        css: {
+                            'line-color': '#ff6b6b',
+                            'target-arrow-color': '#ff6b6b',
+                            'source-arrow-color': '#ff6b6b',
+                            'width': 4,
+                            'opacity': 1
+                        }
+                    },
+                    {
                         selector: 'edge.dimmed',
                         css: {
                             'opacity': 0.2
@@ -314,10 +338,107 @@
                         css: {
                             'display': 'none'
                         }
+                    },
+                    {
+                        selector: 'edge:selected',
+                        css: {
+                            'line-color': '#ff6b6b',
+                            'target-arrow-color': '#ff6b6b',
+                            'source-arrow-color': '#ff6b6b',
+                            'width': 4,
+                            'opacity': 1
+                        }
+                    },
+                    {
+                        selector: 'node.neighbor-highlight',
+                        css: {
+                            'background-color': '#ff6b6b',
+                            'border-width': 3,
+                            'border-color': '#ff0000',
+                            'color': 'white'
+                        }
                     }
                 ],
                 elements: MY_GRAPH_DATA,
                 zoomingEnabled: true
+            });
+
+            // ---------------------------------------------------------
+            // Edge Selection Logic
+            // ---------------------------------------------------------
+            cy.on('select', 'edge', function(e) {
+                const edge = e.target;
+                edge.connectedNodes().addClass('neighbor-highlight');
+            });
+
+            cy.on('unselect', 'edge', function(e) {
+                const edge = e.target;
+                edge.connectedNodes().removeClass('neighbor-highlight');
+            });
+
+            cy.on('select', 'node', function(e) {
+                const node = e.target;
+                node.neighborhood().addClass('neighbor-highlight');
+            });
+
+            cy.on('unselect', 'node', function(e) {
+                const node = e.target;
+                node.neighborhood().removeClass('neighbor-highlight');
+            });
+
+            // Double click to find in tree
+            cy.on('dblclick', 'node', function(e) {
+                const node = e.target;
+                let targetId = node.id();
+
+                // Find the corresponding checkbox in the tree
+                // Strategy: 
+                // 1. Try to find the node itself (it might be a directory)
+                // 2. If not found, check if it has a parent in the graph (it might be a file inside a dir)
+                // 3. Fallback to manually checking parent field from data if Cytoscape parent() not set yet (unlikely)
+
+                let checkbox = document.querySelector(`.checkbox[data-node-id="${CSS.escape(targetId)}"]`);
+
+                if (!checkbox) {
+                    const parent = node.parent();
+                    if (parent.nonempty()) {
+                        targetId = parent.id();
+                        checkbox = document.querySelector(`.checkbox[data-node-id="${CSS.escape(targetId)}"]`);
+                    }
+                }
+
+                if (checkbox) {
+                    // 1. Expand all parents
+                    let parent = checkbox.closest('.tree-children');
+                    while (parent) {
+                        parent.style.display = 'block';
+                        // Update the toggle button for this container
+                        // The toggle button is in the sibling .node-content of the parent .tree-node
+                        const treeNode = parent.closest('.tree-node');
+                        if (treeNode) {
+                            const nodeContent = treeNode.querySelector('.node-content');
+                            if (nodeContent) {
+                                const toggleBtn = nodeContent.querySelector('.toggle-btn');
+                                if (toggleBtn && toggleBtn.innerText === '▶') {
+                                    toggleBtn.innerText = '▼';
+                                }
+                            }
+                        }
+                        parent = parent.parentElement.closest('.tree-children');
+                    }
+
+                    // 2. Highlight text
+                    // Remove existing highlights
+                    document.querySelectorAll('.tree-highlight').forEach(el => el.classList.remove('tree-highlight'));
+                    
+                    const nodeContent = checkbox.closest('.node-content');
+                    if (nodeContent) {
+                        nodeContent.classList.add('tree-highlight');
+                        
+                        // 3. Scroll into view
+                        nodeContent.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
             });
 
             // ---------------------------------------------------------
