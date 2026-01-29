@@ -141,6 +141,7 @@ module = "docs.*"
 ignore_errors = true
 
 [tool.semantic_release]
+allow_zero_version = true
 version_toml = [ "pyproject.toml:project.version" ]
 version_variables = [
     "src/clanguru/__init__.py:__version__",
