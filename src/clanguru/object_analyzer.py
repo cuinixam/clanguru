@@ -4,6 +4,7 @@ import fnmatch
 import os
 import re
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -433,6 +434,11 @@ class NmExecutor:
         if match:
             symbol_type_letter = match.group(1)
             symbol_name = match.group(2)
+
+            # On macOS (Mach-O), the compiler prefixes C symbols with an underscore; strip it
+            # so that symbol names match the source-level identifiers.
+            if sys.platform == "darwin" and symbol_name.startswith("_"):
+                symbol_name = symbol_name[1:]
 
             # Determine linkage based on the symbol type letter
             linkage = SymbolLinkage.EXTERN if symbol_type_letter == "U" else SymbolLinkage.LOCAL

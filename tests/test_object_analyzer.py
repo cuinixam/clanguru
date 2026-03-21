@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -42,13 +43,41 @@ from clanguru.object_analyzer import (
         ("0000000000000000 ? question_mark", None, None),  # ? is not uppercase
     ],
 )
-def test_get_symbol_various(line, expected_name, expected_linkage):
-    result = NmExecutor.get_symbol(line)
+def test_get_symbol_various_linux(line, expected_name, expected_linkage):
+    with patch("clanguru.object_analyzer.sys") as mock_sys:
+        mock_sys.platform = "linux"
+        result = NmExecutor.get_symbol(line)
 
     if expected_name is None:
         assert result is None
     else:
-        # must be a Symbol with the right fields
+        assert isinstance(result, Symbol)
+        assert result.name == expected_name
+        assert result.linkage == expected_linkage
+
+
+@pytest.mark.parametrize(
+    "line, expected_name, expected_linkage",
+    [
+        # On macOS, nm prefixes all C symbols with '_', which gets stripped
+        ("                 U _RteGetPowerState", "RteGetPowerState", SymbolLinkage.EXTERN),
+        ("                 U __imp_GetAsyncKeyState", "_imp_GetAsyncKeyState", SymbolLinkage.EXTERN),
+        ("0000000000000000 T _lightController", "lightController", SymbolLinkage.LOCAL),
+        ("0000000000000000 D _data_symbol", "data_symbol", SymbolLinkage.LOCAL),
+        ("                 C common_symbol", "common_symbol", SymbolLinkage.LOCAL),
+        # Lowercase symbols (should not match)
+        ("0000000000000014 b brightnessValue", None, None),
+        ("garbage line without match", None, None),
+    ],
+)
+def test_get_symbol_various_macos(line, expected_name, expected_linkage):
+    with patch("clanguru.object_analyzer.sys") as mock_sys:
+        mock_sys.platform = "darwin"
+        result = NmExecutor.get_symbol(line)
+
+    if expected_name is None:
+        assert result is None
+    else:
         assert isinstance(result, Symbol)
         assert result.name == expected_name
         assert result.linkage == expected_linkage
