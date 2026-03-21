@@ -179,7 +179,7 @@ int multiply(int a, int b) {
 Running:
 
 ```
-clanguru generate --source-file example.c --output-file example.md
+clanguru docs --source-file example.c --output-file example.md
 ```
 
 Will produce `example.md`:
