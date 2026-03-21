@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.16.1 (2026-03-21)
+
+### Documentation
+
+- Add instructions for ai agents ([`8683db1`](https://github.com/cuinixam/clanguru/commit/8683db1b2c844f94749840f6f4560460bffb4d23))
+
+### Bug fixes
+
+- Global symbols are not found in mac os ([`96aa83f`](https://github.com/cuinixam/clanguru/commit/96aa83f221655d8d04ff4da3ee3539be827ad37e))
+
 ## v0.16.0 (2026-01-29)
 
 ### Build system
