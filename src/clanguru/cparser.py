@@ -196,7 +196,7 @@ class CLangParser:
         self.index = Index.create()
 
     def load(self, file: Path, compilation_options_manager: CompilationOptionsManager | None = None) -> TranslationUnit:
-        args = compilation_options_manager.get_compile_options(file) if compilation_options_manager else []
+        args = compilation_options_manager.get_includes_and_defines(file) if compilation_options_manager else []
         try:
             translation_unit = TranslationUnit(raw_tu=self.index.parse(str(file), args=args), tokens=TokensCollection([]), nodes=[])
         except TranslationUnitLoadError:

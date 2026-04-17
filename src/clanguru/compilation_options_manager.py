@@ -42,6 +42,9 @@ class CompileCommand(DataClassDictMixin):
             options = self.command.split()
         return self.clean_up_arguments(options)
 
+    def get_includes_and_defines(self) -> list[str]:
+        return _filter_includes_and_defines(self.get_compile_options())
+
     def get_file_path(self) -> Path:
         return self.file if self.file.is_absolute() else self.directory / self.file
 
@@ -135,8 +138,32 @@ class CompilationOptionsManager:
                 return commands[0].get_compile_options()
         return [] if self.no_default else self.default_options
 
+    def get_includes_and_defines(self, file: Path) -> list[str]:
+        if self.compilation_database:
+            commands: list[CompileCommand] = self.compilation_database.get_compile_commands(file)
+            if commands:
+                return commands[0].get_includes_and_defines()
+        return [] if self.no_default else _filter_includes_and_defines(self.default_options)
+
     def set_default_options(self, options: list[str]) -> None:
         self.default_options = options
+
+
+def _filter_includes_and_defines(options: list[str]) -> list[str]:
+    """Keep only -I and -D flags (including their values when passed as separate arguments)."""
+    filtered: list[str] = []
+    take_next = False
+    for option in options:
+        if take_next:
+            filtered.append(option)
+            take_next = False
+            continue
+        if option in ("-I", "-D"):
+            filtered.append(option)
+            take_next = True
+        elif option.startswith(("-I", "-D")):
+            filtered.append(option)
+    return filtered
 
 
 def filter_compilation_database(compilation_database: CompilationDatabase, source_files: list[Path]) -> CompilationDatabase:

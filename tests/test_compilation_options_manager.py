@@ -161,6 +161,57 @@ def test_clean_up_arguments_with_partial_paths(compile_command):
     assert compile_command.clean_up_arguments(arguments) == expected
 
 
+@pytest.mark.parametrize(
+    "arguments, expected",
+    [
+        pytest.param(
+            ["gcc", "-DStuff", "-ISome/Path", "-Werror", "-Wall", "-std=c11", "-c", "/home/user/project/input.c", "-o", "/home/user/project/output.o"],
+            ["-DStuff", "-ISome/Path"],
+            id="mixed_flags",
+        ),
+        pytest.param(
+            ["gcc", "-D", "STUFF", "-I", "Some/Path", "-Wall", "-c", "/home/user/project/input.c", "-o", "/home/user/project/output.o"],
+            ["-D", "STUFF", "-I", "Some/Path"],
+            id="separate_value_flags",
+        ),
+        pytest.param(
+            ["gcc", '-DVERSION="1.0"', "-I/usr/include", "-I", "/usr/local/include", "-O2", "-c", "/home/user/project/input.c", "-o", "/home/user/project/output.o"],
+            ['-DVERSION="1.0"', "-I/usr/include", "-I", "/usr/local/include"],
+            id="combined_and_separate",
+        ),
+        pytest.param(
+            ["gcc", "-Wall", "-Werror", "-O2", "-std=c11", "-c", "/home/user/project/input.c", "-o", "/home/user/project/output.o"],
+            [],
+            id="no_includes_or_defines",
+        ),
+    ],
+)
+def test_get_includes_and_defines(compile_command: CompileCommand, arguments: list[str], expected: list[str]) -> None:
+    compile_command.arguments = arguments
+    assert compile_command.get_includes_and_defines() == expected
+
+
+def test_compilation_options_manager_get_includes_and_defines_with_database(temp_compilation_database: Path) -> None:
+    manager = CompilationOptionsManager(temp_compilation_database)
+
+    test1_path = Path(temp_compilation_database.parent) / "test1.c"
+    assert manager.get_includes_and_defines(test1_path) == ["-I/usr/include", "-DDEBUG"]
+
+    test2_path = Path(temp_compilation_database.parent) / "test2.c"
+    assert manager.get_includes_and_defines(test2_path) == []
+
+
+def test_compilation_options_manager_get_includes_and_defines_without_database() -> None:
+    manager = CompilationOptionsManager()
+    manager.set_default_options(["-std=c11", "-I/usr/include", "-DDEBUG", "-Wall"])
+    assert manager.get_includes_and_defines(Path("any_file.c")) == ["-I/usr/include", "-DDEBUG"]
+
+
+def test_compilation_options_manager_get_includes_and_defines_no_default() -> None:
+    manager = CompilationOptionsManager(no_default=True)
+    assert manager.get_includes_and_defines(Path("any_file.c")) == []
+
+
 def test_filter_compilation_database(tmp_path: Path) -> None:
     db_content = [
         {
