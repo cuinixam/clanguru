@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.16.2 (2026-04-17)
+
+### Bug fixes
+
+- Parsing fails because of invalid options from compile commands file ([`4eab9cf`](https://github.com/cuinixam/clanguru/commit/4eab9cfb10d5a46692bc1f8ffc1fe5254ca26bbb))
+
 ## v0.16.1 (2026-03-21)
 
 ### Documentation
