@@ -1,5 +1,4 @@
 import sys
-from enum import Enum
 from pathlib import Path
 
 import typer
@@ -9,7 +8,7 @@ from py_app_dev.core.logging import logger, setup_logger, time_it
 from clanguru import __version__
 from clanguru.compilation_options_manager import CompilationDatabase, CompilationOptionsManager
 from clanguru.cparser import CLangParser
-from clanguru.doc_generator import MarkdownFlavour, MarkdownFormatter, OutputFormatter, RSTFormatter, generate_documentation
+from clanguru.doc_generator import DocsFormat, MarkdownFlavour, MarkdownFormatter, OutputFormatter, RSTFormatter, generate_documentation
 from clanguru.mock_generator import MocksGenerator, MocksGeneratorConfig, MockType
 from clanguru.object_analyzer import (
     NmExecutor,
@@ -35,12 +34,6 @@ def version(
     if version:
         typer.echo(f"{package_name} {__version__}")
         raise typer.Exit()
-
-
-class DocsFormat(Enum):
-    myst = "myst"
-    md = "md"
-    rst = "rst"
 
 
 @app.command(help="Generate documentation for C/C++ source code.")

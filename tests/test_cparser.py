@@ -73,10 +73,30 @@ def test_cparser(c_source_file: Path) -> None:
     function_decls = [func for func in functions if func.is_definition]
     assert len(function_decls) == 2
     assert [func.name for func in function_decls] == ["call_external_functions", "local_function"]
-    assert function_decls[0].description_token is not None
-    assert function_decls[0].description_token.raw_token.spelling == "// Some description for the call_external_functions function"
-    assert function_decls[1].description_token is not None
-    assert "Some description for the local function" in function_decls[1].description_token.raw_token.spelling
+    assert len(function_decls[0].description_tokens) > 0
+    assert function_decls[0].description_tokens[0].raw_token.spelling == "// Some description for the call_external_functions function"
+    assert len(function_decls[1].description_tokens) > 0
+    assert "Some description for the local function" in function_decls[1].description_tokens[0].raw_token.spelling
+
+
+def test_multiple_consecutive_comments_above_function(tmp_path: Path) -> None:
+    file = tmp_path / "multi_comment.c"
+    file.write_text(
+        dedent("""\
+        // First comment block
+        /* Second comment block */
+        void documented_function() {}
+
+        void undocumented_function() {}
+        """)
+    )
+    functions = CLangParser.get_functions(CLangParser().load(file))
+    documented = next(f for f in functions if f.name == "documented_function")
+    undocumented = next(f for f in functions if f.name == "undocumented_function")
+
+    assert len(documented.description_tokens) == 2
+    assert documented.description == "First comment block\n\nSecond comment block"
+    assert undocumented.description is None
 
 
 def test_ctokens_collection(c_source_file: Path) -> None:
@@ -217,13 +237,13 @@ def test_cparser_cpp_with_macros(cpp_test_file: Path) -> None:
     assert len(functions) == 1
     assert functions[0].is_definition
     assert functions[0].name == "my_test_TestBody"
-    assert functions[0].description_token is not None
+    assert len(functions[0].description_tokens) > 0
     assert functions[0].description == "Description for my_test test"
 
     classes = CLangParser.get_classes(translation_unit)
     assert len(classes) == 1
     assert classes[0].name == "my_comp_my_test_Test"
-    assert classes[0].description_token is not None
+    assert len(classes[0].description_tokens) > 0
     assert classes[0].description == "Description for my_test class"
 
 
@@ -279,11 +299,13 @@ def test_parsing_gtest_tests() -> None:
     assert my_mock.description is None
     my_test = next(c for c in classes if c.name == "power_signal_processing_test_power_stays_off")
     assert my_test.description == textwrap.dedent("""\
+        @md
         ```{test} power_signal_processing.test_power_stays_off
            :id: TS_PSP-001
            :tests: SWDD_PSP-001
 
-        ```""")
+        ```
+        @endmd""")
     assert my_test.body.content == "TEST(power_signal_processing, test_power_stays_off)"
-    assert my_test.body.start_line == 29
-    assert my_test.body.end_line == 29
+    assert my_test.body.start_line == 30
+    assert my_test.body.end_line == 30

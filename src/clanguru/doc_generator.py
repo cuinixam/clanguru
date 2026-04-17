@@ -1,10 +1,25 @@
+import re
+import textwrap
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Union
 
-from clanguru.cparser import CLangParser, TranslationUnit
+from clanguru.cparser import CLangParser, Token, TranslationUnit
+
+
+class DocsFormat(Enum):
+    myst = "myst"
+    md = "md"
+    rst = "rst"
+
+    @property
+    def format_tag(self) -> str:
+        """Return the tag used in source comments for this format."""
+        if self == DocsFormat.myst:
+            return "md"
+        return self.value
 
 
 @dataclass
@@ -50,6 +65,12 @@ class DocStructure:
 
 class OutputFormatter(ABC):
     """Abstract base class for output formatters."""
+
+    @property
+    @abstractmethod
+    def docs_format(self) -> DocsFormat:
+        """Return the documentation format for this formatter."""
+        ...
 
     @abstractmethod
     def format(self, doc: DocStructure) -> str:
@@ -111,6 +132,10 @@ class MarkdownFormatter(OutputFormatter):
         for subsection in section.subsections:
             output += self._format_section(subsection, level + 1)
         return output
+
+    @property
+    def docs_format(self) -> DocsFormat:
+        return DocsFormat.myst if self.flavour is MarkdownFlavour.Myst else DocsFormat.md
 
     def format_text(self, text: str) -> str:
         return text.strip()
@@ -186,6 +211,10 @@ class RSTFormatter(OutputFormatter):
             output += self._format_section(subsection, level + 1)
         return output
 
+    @property
+    def docs_format(self) -> DocsFormat:
+        return DocsFormat.rst
+
     def format_text(self, text: str) -> str:
         return text.strip()
 
@@ -239,41 +268,58 @@ class RSTFormatter(OutputFormatter):
         return "\n".join(lines) + "\n"
 
 
-def generate_doc_structure(translation_unit: TranslationUnit) -> DocStructure:
+def _extract_doc_contents(raw_content: str, accepted_tags: list[str]) -> list[str]:
+    """
+    Extract and dedent all content blocks matching any of the accepted tags.
+
+    The opening tag must appear at the start of a line (or the start of the string)
+    to avoid matching tags that appear mid-sentence in prose text.
+    """
+    if not accepted_tags:
+        return []
+    tags_pattern = "|".join(re.escape(tag) for tag in accepted_tags)
+    pattern = rf"(?:^|(?<=\n))(?:@|\\)({tags_pattern})\s*(.*?)\s*(?:@|\\)end\1"
+    matches = re.finditer(pattern, raw_content, flags=re.DOTALL)
+    return [textwrap.dedent(match.group(2)) for match in matches]
+
+
+def _build_declaration_section(name: str, description_tokens: list[Token], body_code: str, body_start_line: int, tags: list[str]) -> Section:
+    section = Section(name)
+    for token in description_tokens:
+        raw = CLangParser.get_comment_content(token)
+        for content in _extract_doc_contents(raw, tags):
+            section.add_content(TextContent(content))
+    section.add_content(CodeContent(code=body_code, start_line=body_start_line))
+    return section
+
+
+def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsFormat = DocsFormat.md) -> DocStructure:
     """
     Generate documentation structure from a translation unit.
 
     Uses the CLangParser to extract functions and classes from the translation unit
     and creates a DocStructure object with the extracted information.
     """
+    tags = [docs_format.format_tag, "docs"]
+
     doc = DocStructure(translation_unit.source_file.name)
-    functions = CLangParser.get_functions(translation_unit)
+    functions = [f for f in CLangParser.get_functions(translation_unit) if f.is_definition]
     if functions:
         functions_section = Section("Functions")
         doc.add_section(functions_section)
-
         for func in functions:
-            if func.is_definition:
-                func_section = Section(func.name)
-                if func.description_token:
-                    func_section.add_content(TextContent(CLangParser.get_comment_content(func.description_token)))
-                func_section.add_content(CodeContent(code=func.body.content, start_line=func.body.start_line))
-                functions_section.add_subsection(func_section)
+            functions_section.add_subsection(_build_declaration_section(func.name, func.description_tokens, func.body.content, func.body.start_line, tags))
+
     classes = CLangParser.get_classes(translation_unit)
     if classes:
         classes_section = Section("Classes")
         doc.add_section(classes_section)
-
         for cls in classes:
-            cls_section = Section(cls.name)
-            if cls.description_token:
-                cls_section.add_content(TextContent(CLangParser.get_comment_content(cls.description_token)))
-            cls_section.add_content(CodeContent(code=cls.body.content, start_line=cls.body.start_line))
-            classes_section.add_subsection(cls_section)
+            classes_section.add_subsection(_build_declaration_section(cls.name, cls.description_tokens, cls.body.content, cls.body.start_line, tags))
 
     return doc
 
 
 def generate_documentation(translation_unit: TranslationUnit, formatter: OutputFormatter, output_file: Path) -> None:
     """Generate documentation from a translation unit and write it to a file using the specified formatter."""
-    output_file.write_text(formatter.format(generate_doc_structure(translation_unit)))
+    output_file.write_text(formatter.format(generate_doc_structure(translation_unit, formatter.docs_format)))

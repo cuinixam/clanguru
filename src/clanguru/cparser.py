@@ -106,15 +106,17 @@ T = TypeVar("T", bound="Declaration")
 
 
 class Declaration:
-    def __init__(self, name: str, origin: Node, description_token: Token | None, body: SourceCodeSnippet):
+    def __init__(self, name: str, origin: Node, description_tokens: list[Token], body: SourceCodeSnippet):
         self.name = name
         self.origin = origin
-        self.description_token = description_token
+        self.description_tokens = description_tokens
         self.body = body
 
     @property
     def description(self) -> str | None:
-        return CLangParser.get_comment_content(self.description_token) if self.description_token else None
+        if not self.description_tokens:
+            return None
+        return "\n\n".join(CLangParser.get_comment_content(t) for t in self.description_tokens)
 
 
 class Function(Declaration):
@@ -244,9 +246,9 @@ class CLangParser:
         for node in tu.nodes:
             if node.raw_node.kind.name == declaration_type:
                 name = node.raw_node.spelling
-                description = CLangParser.search_description(node)
+                description_tokens = CLangParser.search_description(node)
                 source_code = CLangParser.get_node_source_code(node)
-                declarations.append(declaration_class(name, node, description, source_code))
+                declarations.append(declaration_class(name, node, description_tokens, source_code))
         return declarations
 
     @staticmethod
@@ -262,33 +264,40 @@ class CLangParser:
         return CLangParser._get_declarations(tu, "CLASS_DECL", CppClass)
 
     @staticmethod
-    def search_description(node: Node) -> Token | None:
+    def search_description(node: Node) -> list[Token]:
         """
-        Get the description comment for a node.
+        Collect all consecutive comment tokens immediately above a node.
 
-        This method searches for a comment token immediately preceding the node's first token,
-        but on a different line and from the same file as the original node. If found, it returns the comment token, otherwise None.
+        Walks backward from the node's first token, collecting comment tokens that
+        are on earlier lines in the same file. Stops at the first non-comment token.
+        Returns the comments in source order (top to bottom).
         """
-        # Get the file where the node is actually declared
         node_file = node.raw_node.location.file
         if node_file is None:
-            return None
+            return []
 
-        if first_token := node.tokens.first():
-            current_token = first_token
-            while current_token.previous_token:
-                prev_token = current_token.previous_token
-                # Check that the comment token is from the same file as the original node
-                if prev_token.raw_token.location.file is None or prev_token.raw_token.location.file.name != node_file.name:
+        comments: list[Token] = []
+        first_token = node.tokens.first()
+        if not first_token:
+            return []
+
+        current_token = first_token
+        while current_token.previous_token:
+            prev_token = current_token.previous_token
+            if prev_token.raw_token.location.file is None or prev_token.raw_token.location.file.name != node_file.name:
+                current_token = prev_token
+                continue
+            if prev_token.raw_token.location.line < current_token.raw_token.location.line:
+                if prev_token.is_comment:
+                    comments.append(prev_token)
                     current_token = prev_token
                     continue
-                if prev_token.raw_token.location.line < current_token.raw_token.location.line:
-                    if prev_token.is_comment:
-                        return prev_token
-                    else:
-                        break
-                current_token = prev_token
-        return None
+                else:
+                    break
+            current_token = prev_token
+
+        comments.reverse()
+        return comments
 
     @staticmethod
     def get_node_source_code(node: Node) -> SourceCodeSnippet:

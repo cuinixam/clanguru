@@ -19,12 +19,13 @@
 #include "test_gtest.h"
 
 /*!
- *
+ * @md
  * ```{test} power_signal_processing.test_power_stays_off
  *    :id: TS_PSP-001
  *    :tests: SWDD_PSP-001
  *
  * ```
+ * @endmd
  */
 TEST(power_signal_processing, test_power_stays_off)
 {
