@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.0 (2026-04-18)
+
+### Features
+
+- Support docs tags in source file comments ([`395176f`](https://github.com/cuinixam/clanguru/commit/395176ff343b53f0691b0a0e2dfa769c82525c35))
+
 ## v0.16.2 (2026-04-17)
 
 ### Bug fixes
