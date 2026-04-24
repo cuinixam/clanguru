@@ -7,7 +7,7 @@ import pytest
 
 from clanguru.compilation_options_manager import CompilationOptionsManager
 from clanguru.cparser import CLangParser, Token
-from tests.conftest import get_test_data_file
+from tests.conftest import get_test_data_file, make_compile_commands
 
 
 @pytest.fixture
@@ -287,25 +287,23 @@ def test_parsing_variables(tmp_path: Path) -> None:
     assert variables[2].get_init_value() == "my_var1"
 
 
-def test_parsing_gtest_tests() -> None:
-    file = get_test_data_file("test_gtest.cc")
-    options_manager = CompilationOptionsManager()
-    options_manager.set_default_options([f"-I{file.parent}"])
-    tu = CLangParser().load(file, options_manager)
-    classes = CLangParser.get_classes(tu)
-    assert len(classes) == 2
-    assert {func.name for func in classes} == {"MyMock", "power_signal_processing_test_power_stays_off"}
-    my_mock = next(c for c in classes if c.name == "MyMock")
-    assert my_mock.description is None
-    my_test = next(c for c in classes if c.name == "power_signal_processing_test_power_stays_off")
-    assert my_test.description == textwrap.dedent("""\
+def test_parsing_gtest_tests(tmp_path: Path, gtest_include_path: Path) -> None:
+    source_file = get_test_data_file("test_gtest.cc")
+    compile_db = make_compile_commands(tmp_path, source_file, [gtest_include_path])
+    tu = CLangParser().load(source_file, CompilationOptionsManager(compile_db))
+    classes_by_name = {cls.name: cls for cls in CLangParser.get_classes(tu)}
+
+    test_class = classes_by_name["power_signal_processing_test_power_stays_off_Test"]
+    assert test_class.description == textwrap.dedent("""\
         @md
-        ```{test} power_signal_processing.test_power_stays_off
+        ```{test} {{ gtest.test }}
            :id: TS_PSP-001
            :tests: SWDD_PSP-001
 
         ```
         @endmd""")
-    assert my_test.body.content == "TEST(power_signal_processing, test_power_stays_off)"
-    assert my_test.body.start_line == 30
-    assert my_test.body.end_line == 30
+    assert test_class.body.content == "TEST(power_signal_processing, test_power_stays_off)"
+
+    param_class = classes_by_name["BlinkPeriodTest_CalculatesCorrectBlinkPeriod_Test"]
+    assert param_class.body.content == "TEST_P(BlinkPeriodTest, CalculatesCorrectBlinkPeriod)"
+    assert "{{ gtest.test }}" in (param_class.description or "")

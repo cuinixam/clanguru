@@ -6,7 +6,24 @@ from enum import Enum
 from pathlib import Path
 from typing import Union
 
+from jinja2 import Environment, StrictUndefined, TemplateError, UndefinedError, select_autoescape
+from py_app_dev.core.exceptions import UserNotificationException
+
 from clanguru.cparser import CLangParser, Token, TranslationUnit
+
+GTEST_MACROS = ("TEST", "TEST_P", "TEST_F", "TYPED_TEST", "TYPED_TEST_P")
+_GTEST_DECL_RE = re.compile(rf"^\s*(?:{'|'.join(GTEST_MACROS)})\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)")
+_TEMPLATE_ENV = Environment(undefined=StrictUndefined, autoescape=select_autoescape(enabled_extensions=()))
+
+
+@dataclass
+class GTestInfo:
+    suite: str
+    case: str
+
+    @property
+    def test(self) -> str:
+        return f"{self.suite}.{self.case}"
 
 
 class DocsFormat(Enum):
@@ -283,12 +300,40 @@ def _extract_doc_contents(raw_content: str, accepted_tags: list[str]) -> list[st
     return [textwrap.dedent(match.group(2)) for match in matches]
 
 
+def _detect_gtest(body_code: str) -> GTestInfo | None:
+    """Return `GTestInfo` if `body_code` starts with a recognized GTest macro call."""
+    match = _GTEST_DECL_RE.match(body_code)
+    if not match:
+        return None
+    return GTestInfo(suite=match.group(1), case=match.group(2))
+
+
+def _render_doc_template(content: str, declaration_name: str, gtest: GTestInfo | None) -> str:
+    """
+    Render a doc block as a Jinja2 template.
+
+    Undefined variables raise `UserNotificationException` with the declaration name so
+    authors can locate the faulty placeholder. Content without `{{`/`{%` is returned
+    verbatim (cheap short-circuit).
+    """
+    if "{{" not in content and "{%" not in content:
+        return content
+    context = {"gtest": gtest} if gtest is not None else {}
+    try:
+        return _TEMPLATE_ENV.from_string(content).render(context)
+    except UndefinedError as error:
+        raise UserNotificationException(f"Undefined template variable in doc block of '{declaration_name}': {error.message}") from error
+    except TemplateError as error:
+        raise UserNotificationException(f"Template error in doc block of '{declaration_name}': {error}") from error
+
+
 def _build_declaration_section(name: str, description_tokens: list[Token], body_code: str, body_start_line: int, tags: list[str]) -> Section:
     section = Section(name)
+    gtest = _detect_gtest(body_code)
     for token in description_tokens:
         raw = CLangParser.get_comment_content(token)
         for content in _extract_doc_contents(raw, tags):
-            section.add_content(TextContent(content))
+            section.add_content(TextContent(_render_doc_template(content, name, gtest)))
     section.add_content(CodeContent(code=body_code, start_line=body_start_line))
     return section
 

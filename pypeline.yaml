@@ -14,6 +14,8 @@ pipeline:
     module: pypeline.steps.env_setup_script
   - step: PreCommit
     run: pre-commit run --all-files
+  - step: WestInstall
+    module: pypeline.steps.west_install
   - step: PyTest
     run: pytest
   - step: Docs

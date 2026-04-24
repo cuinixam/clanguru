@@ -1,22 +1,26 @@
-import textwrap
 from pathlib import Path
 from textwrap import dedent
 
 import pytest
+from py_app_dev.core.exceptions import UserNotificationException
 
+from clanguru.compilation_options_manager import CompilationOptionsManager
 from clanguru.cparser import CLangParser, TranslationUnit
 from clanguru.doc_generator import (
     CodeContent,
     DocsFormat,
+    GTestInfo,
     MarkdownFlavour,
     MarkdownFormatter,
     RSTFormatter,
     Section,
     TextContent,
+    _detect_gtest,
+    _render_doc_template,
     generate_doc_structure,
     generate_documentation,
 )
-from tests.conftest import assert_element_of_type, assert_elements_of_type, get_test_data_file
+from tests.conftest import assert_element_of_type, get_test_data_file, make_compile_commands
 
 
 @pytest.fixture
@@ -207,30 +211,16 @@ def test_doc_structure_with_traceability(c_source_with_traceability: Translation
         }""")
 
 
-def test_doc_structure_for_gtest_files() -> None:
-    doc_structure = generate_doc_structure(CLangParser().load(get_test_data_file("test_gtest.cc")), DocsFormat.md)
-    assert len(doc_structure.sections) == 1
-    classes_section = doc_structure.sections[0]
-    assert classes_section.title == "Classes"
-    sections = assert_elements_of_type(classes_section.subsections, Section, 2)
-    assert {section.title for section in sections} == {"MyMock", "power_signal_processing_test_power_stays_off"}
-    test_section = assert_element_of_type(classes_section.subsections, Section, lambda s: s.title == "power_signal_processing_test_power_stays_off")
+def test_doc_structure_for_gtest_files(tmp_path: Path, gtest_include_path: Path) -> None:
+    source_file = get_test_data_file("test_gtest.cc")
+    expected_output = get_test_data_file("test_gtest.cc.md").read_text()
+    compile_db = make_compile_commands(tmp_path, source_file, [gtest_include_path])
+    translation_unit = CLangParser().load(source_file, CompilationOptionsManager(compile_db))
 
-    # Check that we have both text content (description) and code content
-    text_content = assert_element_of_type(test_section.content, TextContent)
-    code_content = assert_element_of_type(test_section.content, CodeContent)
+    output_file = tmp_path / "test_gtest.cc.md"
+    generate_documentation(translation_unit, MarkdownFormatter(MarkdownFlavour.Myst), output_file)
 
-    # Verify the text content contains the test directive
-    assert text_content.text == textwrap.dedent("""\
-        ```{test} power_signal_processing.test_power_stays_off
-           :id: TS_PSP-001
-           :tests: SWDD_PSP-001
-
-        ```""")
-
-    # Verify the code content contains the test declaration
-    assert code_content.code == "TEST(power_signal_processing, test_power_stays_off)"
-    assert code_content.start_line == 30
+    assert output_file.read_text() == expected_output
 
 
 def test_generate_documentation(c_source: TranslationUnit, tmp_path: Path) -> None:
@@ -460,6 +450,72 @@ def test_rst_formatter_format_table() -> None:
     +---------------------+------+
     """)
     assert table == expected
+
+
+@pytest.mark.parametrize(
+    ("body_code", "expected"),
+    [
+        ("TEST(suite, case)", GTestInfo(suite="suite", case="case")),
+        ("TEST_P(Fx, Runs)", GTestInfo(suite="Fx", case="Runs")),
+        ("TEST_F(MyFix, doesThing)", GTestInfo(suite="MyFix", case="doesThing")),
+        ("TYPED_TEST(TypeSuite, IsInstantiated)", GTestInfo(suite="TypeSuite", case="IsInstantiated")),
+        ("TYPED_TEST_P(TypeSuite, FancyCase)", GTestInfo(suite="TypeSuite", case="FancyCase")),
+        ("  TEST ( padded , name )\n{ }", GTestInfo(suite="padded", case="name")),
+        ("int regular_function() { return 0; }", None),
+        ("struct NotATest {};", None),
+    ],
+)
+def test_detect_gtest(body_code: str, expected: GTestInfo | None) -> None:
+    assert _detect_gtest(body_code) == expected
+
+
+def test_gtest_info_dotted_name() -> None:
+    assert GTestInfo(suite="power_signal", case="stays_off").test == "power_signal.stays_off"
+
+
+@pytest.mark.parametrize(
+    ("content", "gtest", "expected"),
+    [
+        ("no placeholders here", None, "no placeholders here"),
+        ("no placeholders here", GTestInfo("s", "c"), "no placeholders here"),
+        ("{{ gtest.suite }}.{{ gtest.case }}", GTestInfo("lc", "stays_off"), "lc.stays_off"),
+        ("{{ gtest.test }}", GTestInfo("lc", "stays_off"), "lc.stays_off"),
+        ("Prefix/{{ gtest.test }}/*", GTestInfo("BP", "calc"), "Prefix/BP.calc/*"),
+    ],
+)
+def test_render_doc_template_success(content: str, gtest: GTestInfo | None, expected: str) -> None:
+    assert _render_doc_template(content, "decl", gtest) == expected
+
+
+def test_render_doc_template_undefined_on_non_gtest_raises() -> None:
+    with pytest.raises(UserNotificationException, match="decl_name"):
+        _render_doc_template("{{ gtest.test }}", "decl_name", None)
+
+
+def test_render_doc_template_bad_syntax_raises() -> None:
+    with pytest.raises(UserNotificationException, match="broken_decl"):
+        _render_doc_template("{{ gtest.test", "broken_decl", GTestInfo("s", "c"))
+
+
+def test_template_expansion_through_doc_structure(tmp_path: Path) -> None:
+    body = dedent("""\
+    #define TEST(s, n) class s##_##n {}
+    /**
+     * @rst
+     * .. test:: {{ gtest.test }}
+     *    :id: TS-001
+     * @endrst
+     */
+    TEST(my_suite, my_case)
+    """)
+    source = tmp_path / "gt.cc"
+    source.write_text(body, newline="\n")
+    tu = CLangParser().load(source)
+    doc = generate_doc_structure(tu, DocsFormat.rst)
+    class_section = next(s for s in doc.sections[0].subsections if s.title == "my_suite_my_case")
+    rendered = assert_element_of_type(class_section.content, TextContent).text
+    assert "my_suite.my_case" in rendered
+    assert "{{" not in rendered
 
 
 def test_multiple_doc_blocks_in_single_comment(tmp_path: Path) -> None:

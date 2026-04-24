@@ -34,6 +34,66 @@ clanguru docs --source-file src/example.c --output-file docs/example.md --compil
 
 This approach is ideal for projects that need quick, straightforward documentation without the overhead of more complex systems.
 
+### Tagged Documentation Blocks
+
+By default, the comment above a declaration is emitted verbatim. You can scope the output to specific blocks inside that comment by wrapping them in a tag pair:
+
+| Opening | Closing     | When it is emitted                                     |
+| ------- | ----------- | ------------------------------------------------------ |
+| `@docs` | `@enddocs`  | Always (format-neutral).                               |
+| `@md`   | `@endmd`    | Only when generating Markdown or Myst Markdown.        |
+| `@rst`  | `@endrst`   | Only when generating RestructuredText.                 |
+
+A comment may contain multiple tagged blocks; they are emitted in source order. Untagged prose is ignored when at least one tag is present. Tags also accept the backslash form (`\docs`/`\endrst`/…) to play nicely with Doxygen-flavoured comments.
+
+```c
+/**
+ * @rst
+ * .. impl:: Sum Implementation
+ *    :id: IMPL-SUM-001
+ * @endrst
+ */
+int sum(int a, int b) { return a + b; }
+```
+
+### Placeholder Expansion
+
+Each tagged block is rendered as a [Jinja2](https://jinja.palletsprojects.com/) template before being emitted. A `gtest` namespace is exposed when the declaration is a GoogleTest macro call (`TEST`, `TEST_P`, `TEST_F`, `TYPED_TEST`, `TYPED_TEST_P`):
+
+| Variable      | Value                                        |
+| ------------- | -------------------------------------------- |
+| `gtest.suite` | First argument of the macro (the suite name) |
+| `gtest.case`  | Second argument (the case name)              |
+| `gtest.test`  | Shorthand for `"<suite>.<case>"`             |
+
+This lets a `sphinx-needs` `.. test::` directive match the JUnit `<testcase>` name by construction, so traceability holds without copy-pasting the identifiers:
+
+```cpp
+/**
+ * @rst
+ * .. test:: {{ gtest.test }}
+ *    :id: TS_LC-006
+ *    :tests: SWDD_LC-100, SWDD_LC-300
+ * @endrst
+ */
+TEST(light_controller, test_light_stays_off) { /* ... */ }
+```
+
+Parameterised tests keep the `INSTANTIATE_TEST_SUITE_P` prefix as literal text — only the macro arguments are available to the template:
+
+```cpp
+/**
+ * @rst
+ * .. test:: BlinkPeriodTests/{{ gtest.test }}/*
+ *    :id: TS_LC-003
+ *    :tests: SWDD_LC-101
+ * @endrst
+ */
+TEST_P(BlinkPeriodTest, CalculatesCorrectBlinkPeriod) { /* ... */ }
+```
+
+Undefined variables (for example, `{{ gtest.test }}` on a non-test function) raise an error that names the offending declaration, so mistakes surface at doc-generation time rather than downstream in the Sphinx build.
+
 ## Mock Generation
 
 Generate C function mocks for unit testing with support for GMock and CMock frameworks.
