@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.18.0 (2026-04-24)
+
+### Features
+
+- Support placeholders for source code docs ([`1a0c3a9`](https://github.com/cuinixam/clanguru/commit/1a0c3a9a5f351c643659ed676615525207ef1264))
+
 ## v0.17.0 (2026-04-18)
 
 ### Features
