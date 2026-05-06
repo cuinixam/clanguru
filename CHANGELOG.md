@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.0 (2026-05-06)
+
+### Features
+
+- Add option to generate jinja raw tags for code blocks ([`b458c7c`](https://github.com/cuinixam/clanguru/commit/b458c7c9ce3257c75de571129c31c7d02dc9817b))
+
 ## v0.18.0 (2026-04-24)
 
 ### Features
