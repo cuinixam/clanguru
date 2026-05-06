@@ -129,9 +129,10 @@ class MarkdownFormatter(OutputFormatter):
     * Myst: MystParser extended ``code-block`` directive with options (linenos & highlight lines).
     """
 
-    def __init__(self, flavour: MarkdownFlavour = MarkdownFlavour.Raw) -> None:
+    def __init__(self, flavour: MarkdownFlavour = MarkdownFlavour.Raw, *, jinja_raw_tags: bool = False) -> None:
         super().__init__()
         self.flavour = flavour
+        self.jinja_raw_tags = jinja_raw_tags
 
     def format(self, doc: DocStructure) -> str:
         output = f"# {doc.title}\n\n"
@@ -160,9 +161,10 @@ class MarkdownFormatter(OutputFormatter):
     def format_code(self, content: CodeContent) -> str:
         if self.flavour is MarkdownFlavour.Myst:
             return self.format_code_block_myst(content)
-        else:
-            # Raw flavour - classic fenced block
-            return f"```{content.language}\n{content.code}\n```"
+        code_block = f"```{content.language}\n{content.code}\n```"
+        if self.jinja_raw_tags:
+            return f"{{% raw %}}\n{code_block}\n{{% endraw %}}"
+        return code_block
 
     def format_code_block_myst(self, content: CodeContent) -> str:
         """
@@ -195,7 +197,10 @@ class MarkdownFormatter(OutputFormatter):
         body_parts.append("")
         body_parts.append(content.code)
         body_parts.append("```")
-        return "\n".join(body_parts)
+        result = "\n".join(body_parts)
+        if self.jinja_raw_tags:
+            return f"{{% raw %}}\n{result}\n{{% endraw %}}"
+        return result
 
     def format_table(self, headers: list[str], rows: list[list[str]]) -> str:
         header_line = "| " + " | ".join(headers) + " |"
@@ -209,6 +214,10 @@ class MarkdownFormatter(OutputFormatter):
 
 class RSTFormatter(OutputFormatter):
     """reStructuredText output formatter for documentation."""
+
+    def __init__(self, *, jinja_raw_tags: bool = False) -> None:
+        super().__init__()
+        self.jinja_raw_tags = jinja_raw_tags
 
     def format(self, doc: DocStructure) -> str:
         output = f"{doc.title}\n{'=' * len(doc.title)}\n\n"
@@ -249,7 +258,10 @@ class RSTFormatter(OutputFormatter):
         if options_str:
             options_str = "\n" + options_str + "\n"
 
-        return f".. code-block:: {content.language}{options_str}\n{self._indent_code(content.code)}\n"
+        code_block = f".. code-block:: {content.language}{options_str}\n{self._indent_code(content.code)}\n"
+        if self.jinja_raw_tags:
+            return f"{{% raw %}}\n{code_block}{{% endraw %}}\n"
+        return code_block
 
     def _indent_code(self, code: str) -> str:
         return "\n".join(f"    {line}" for line in code.split("\n"))

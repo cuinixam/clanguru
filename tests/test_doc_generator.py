@@ -104,6 +104,103 @@ def test_markdown_formatter(c_source: TranslationUnit) -> None:
     assert formatter.file_extension() == "md"
 
 
+def test_markdown_formatter_jinja_raw_tags(c_source: TranslationUnit) -> None:
+    doc_structure = generate_doc_structure(c_source)
+    formatter = MarkdownFormatter(MarkdownFlavour.Myst, jinja_raw_tags=True)
+    output = formatter.format(doc_structure)
+
+    expected_output = dedent("""\
+    # test.c
+
+    ## Functions
+
+    ### test_function
+
+    This is a test function
+
+    {% raw %}
+    ```{code-block} c
+    :linenos:
+    :lineno-start: 2
+
+    int test_function() {
+        return 0;
+    }
+    ```
+    {% endraw %}
+
+    ### another_function
+
+    This is a multi-line
+    function description
+
+    {% raw %}
+    ```{code-block} c
+    :linenos:
+    :lineno-start: 12
+
+    void another_function(int arg) {
+        if (arg > 0) {
+            // Do something
+        }
+    }
+    ```
+    {% endraw %}
+    """)
+
+    assert output.strip() == expected_output.strip()
+
+
+def test_rst_formatter_jinja_raw_tags(c_source: TranslationUnit) -> None:
+    doc_structure = generate_doc_structure(c_source, DocsFormat.rst)
+    formatter = RSTFormatter(jinja_raw_tags=True)
+    output = formatter.format(doc_structure)
+
+    expected_output = dedent("""\
+    test.c
+    ======
+
+    Functions
+    ---------
+
+    test_function
+    ~~~~~~~~~~~~~
+
+    This is a test function
+
+    {% raw %}
+    .. code-block:: c
+       :linenos:
+       :lineno-start: 2
+
+        int test_function() {
+            return 0;
+        }
+    {% endraw %}
+
+
+    another_function
+    ~~~~~~~~~~~~~~~~
+
+    This is a multi-line
+    function description
+
+    {% raw %}
+    .. code-block:: c
+       :linenos:
+       :lineno-start: 12
+
+        void another_function(int arg) {
+            if (arg > 0) {
+                // Do something
+            }
+        }
+    {% endraw %}
+    """)
+
+    assert output.strip() == expected_output.strip()
+
+
 def test_rst_formatter(c_source: TranslationUnit) -> None:
     doc_structure = generate_doc_structure(c_source, DocsFormat.rst)
     formatter = RSTFormatter()

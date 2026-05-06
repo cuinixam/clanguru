@@ -47,14 +47,15 @@ def docs(
         case_sensitive=False,
         help="Output documentation format. Supported: Myst Markdown flavour (default), Markdown, RestructuredText.",
     ),
+    jinja_raw_tags: bool = typer.Option(False, help="Wrap code blocks with Jinja2 raw tags to prevent template parsing errors."),
 ) -> None:
     parser = CLangParser()
     translation_unit = parser.load(source_file, CompilationOptionsManager(compilation_database))
     formatter: OutputFormatter
     if format == DocsFormat.rst:
-        formatter = RSTFormatter()
+        formatter = RSTFormatter(jinja_raw_tags=jinja_raw_tags)
     else:
-        formatter = MarkdownFormatter(MarkdownFlavour.Myst if format == DocsFormat.myst else MarkdownFlavour.Raw)
+        formatter = MarkdownFormatter(MarkdownFlavour.Myst if format == DocsFormat.myst else MarkdownFlavour.Raw, jinja_raw_tags=jinja_raw_tags)
     generate_documentation(translation_unit, formatter, output_file)
 
 
