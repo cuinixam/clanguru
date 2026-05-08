@@ -1,3 +1,4 @@
+import bisect
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -26,6 +27,11 @@ class Token:
     raw_token: _Token
     previous_token: Optional["Token"]
     next_token: Optional["Token"]
+    cached_offset_start: int = 0
+    cached_offset_end: int = 0
+    cached_file_name: str = ""
+    cached_line: int = 0
+    cached_spelling: str = ""
 
     @property
     def is_comment(self) -> bool:
@@ -40,7 +46,15 @@ class Token:
         return False
 
     def __str__(self) -> str:
-        return f"{self.raw_token.kind.name} ('{self.raw_token.spelling}' at line {self.raw_token.location.line})"
+        return f"{self.raw_token.kind.name} ('{self.cached_spelling}' at line {self.cached_line})"
+
+
+def _safe_spelling(raw_token: _Token) -> str:
+    """Extract token spelling, replacing non-decodable bytes from the libclang FFI."""
+    try:
+        return raw_token.spelling
+    except UnicodeDecodeError:
+        return "\ufffd"
 
 
 class TokensCollection(list[Token]):
@@ -53,9 +67,20 @@ class TokensCollection(list[Token]):
         return self[0] if self else None
 
     def find_matching_token(self, raw_token: _Token) -> Token | None:
-        """Find the token in the collection by the raw token."""
-        # TODO: Find a nicer way to do this. Currently we rely on the fact that the token previous and next tokens are ignored while hashing.
-        return self.tokens_ordered_dict.get(Token(raw_token, None, None), None)
+        """
+        Find the token in the collection by the raw token.
+
+        Builds a lookup Token with cached_spelling and cached_line populated
+        because Token identity (hash/eq) is based on these cached fields.
+        """
+        lookup = Token(
+            raw_token=raw_token,
+            previous_token=None,
+            next_token=None,
+            cached_line=raw_token.location.line,
+            cached_spelling=_safe_spelling(raw_token),
+        )
+        return self.tokens_ordered_dict.get(lookup, None)
 
 
 @dataclass
@@ -210,7 +235,19 @@ class CLangParser:
     def _extract_tokens(self, cursor: Cursor) -> TokensCollection:
         tokens: list[Token] = []
         for token in cursor.get_tokens():
-            current_token = Token(raw_token=token, previous_token=None, next_token=None)
+            extent = token.extent
+            location = token.location
+            file_obj = location.file
+            current_token = Token(
+                raw_token=token,
+                previous_token=None,
+                next_token=None,
+                cached_offset_start=extent.start.offset,
+                cached_offset_end=extent.end.offset,
+                cached_file_name=file_obj.name if file_obj else "",
+                cached_line=location.line,
+                cached_spelling=_safe_spelling(token),
+            )
             if tokens:
                 previous_token = tokens[-1]
                 previous_token.next_token = current_token
@@ -219,9 +256,16 @@ class CLangParser:
         return TokensCollection(tokens)
 
     def _extract_nodes(self, translation_unit: TranslationUnit) -> list[Node]:
+        token_offsets = [token.cached_offset_start for token in translation_unit.tokens]
         nodes: list[Node] = []
         for child in translation_unit.raw_tu.cursor.get_children():
-            current_node = Node(raw_node=child, previous_node=None, next_node=None, tokens=self._collect_node_tokens(child, translation_unit.tokens), parent=translation_unit)
+            current_node = Node(
+                raw_node=child,
+                previous_node=None,
+                next_node=None,
+                tokens=self._collect_node_tokens(child, translation_unit.tokens, token_offsets),
+                parent=translation_unit,
+            )
             if nodes:
                 previous_node = nodes[-1]
                 previous_node.next_node = current_node
@@ -229,16 +273,13 @@ class CLangParser:
             nodes.append(current_node)
         return nodes
 
-    def _collect_node_tokens(self, node: Cursor, tokens: TokensCollection) -> TokensCollection:
+    def _collect_node_tokens(self, node: Cursor, tokens: TokensCollection, token_offsets: list[int]) -> TokensCollection:
         """Get the raw tokens for the node and search for them in the given tokens list."""
-        node_tokens = []
-        # Do not use node.get_tokens() directly, as it may return an empty list for nodes generated from macros
-        # Iterate over all the tokens in CTokensCollection and find the ones with their locations within the node extent
-        for token in tokens:
-            if node.extent.start.offset <= token.raw_token.extent.start.offset <= node.extent.end.offset:
-                node_tokens.append(token)
-
-        return TokensCollection(node_tokens)
+        node_start = node.extent.start.offset
+        node_end = node.extent.end.offset
+        left = bisect.bisect_left(token_offsets, node_start)
+        right = bisect.bisect_right(token_offsets, node_end, lo=left)
+        return TokensCollection(tokens[left:right])
 
     @staticmethod
     def _get_declarations(tu: TranslationUnit, declaration_type: str, declaration_class: type[T]) -> list[T]:
@@ -276,6 +317,7 @@ class CLangParser:
         if node_file is None:
             return []
 
+        node_file_name = node_file.name
         comments: list[Token] = []
         first_token = node.tokens.first()
         if not first_token:
@@ -284,10 +326,10 @@ class CLangParser:
         current_token = first_token
         while current_token.previous_token:
             prev_token = current_token.previous_token
-            if prev_token.raw_token.location.file is None or prev_token.raw_token.location.file.name != node_file.name:
+            if not prev_token.cached_file_name or prev_token.cached_file_name != node_file_name:
                 current_token = prev_token
                 continue
-            if prev_token.raw_token.location.line < current_token.raw_token.location.line:
+            if prev_token.cached_line < current_token.cached_line:
                 if prev_token.is_comment:
                     comments.append(prev_token)
                     current_token = prev_token
@@ -352,7 +394,7 @@ class CLangParser:
         if not token.is_comment:
             return ""
 
-        content = token.raw_token.spelling.strip()
+        content = token.cached_spelling.strip()
         # Normalize Windows newlines to ensure consistent output
         content = content.replace("\r\n", "\n")
 

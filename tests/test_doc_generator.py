@@ -642,3 +642,21 @@ def test_multiple_doc_blocks_in_single_comment(tmp_path: Path) -> None:
 
     text_blocks = [c.text for c in func_section.content if isinstance(c, TextContent)]
     assert text_blocks == ["First block.", "Second block.", "Third block."]
+
+
+def test_generate_documentation_utf8_encoding(tmp_path: Path) -> None:
+    c_file = tmp_path / "utf8.c"
+    c_file.write_text(
+        dedent("""\
+        /** @docs Stra\u00dfe \u00fcber Br\u00fccke @enddocs */
+        void utf8_func() {}
+        """),
+        encoding="utf-8",
+        newline="\n",
+    )
+    tu = CLangParser().load(c_file)
+    output = tmp_path / "utf8.md"
+    generate_documentation(tu, formatter=MarkdownFormatter(MarkdownFlavour.Myst), output_file=output)
+
+    content = output.read_bytes().decode("utf-8")
+    assert "Stra\u00dfe \u00fcber Br\u00fccke" in content

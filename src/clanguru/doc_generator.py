@@ -379,4 +379,4 @@ def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsF
 
 def generate_documentation(translation_unit: TranslationUnit, formatter: OutputFormatter, output_file: Path) -> None:
     """Generate documentation from a translation unit and write it to a file using the specified formatter."""
-    output_file.write_text(formatter.format(generate_doc_structure(translation_unit, formatter.docs_format)))
+    output_file.write_text(formatter.format(generate_doc_structure(translation_unit, formatter.docs_format)), encoding="utf-8")

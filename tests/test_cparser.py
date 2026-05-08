@@ -307,3 +307,37 @@ def test_parsing_gtest_tests(tmp_path: Path, gtest_include_path: Path) -> None:
     param_class = classes_by_name["BlinkPeriodTest_CalculatesCorrectBlinkPeriod_Test"]
     assert param_class.body.content == "TEST_P(BlinkPeriodTest, CalculatesCorrectBlinkPeriod)"
     assert "{{ gtest.test }}" in (param_class.description or "")
+
+
+def test_token_cached_fields_match_raw_properties(tmp_path: Path) -> None:
+    file = tmp_path / "cached.c"
+    file.write_text("int x = 42;\n")
+    tu = CLangParser().load(file)
+
+    for token in tu.tokens:
+        raw = token.raw_token
+        assert token.cached_spelling == raw.spelling
+        assert token.cached_line == raw.location.line
+        assert token.cached_offset_start == raw.extent.start.offset
+        assert token.cached_offset_end == raw.extent.end.offset
+        raw_file = raw.location.file
+        assert token.cached_file_name == (raw_file.name if raw_file else "")
+
+
+def test_node_tokens_match_node_extent(tmp_path: Path) -> None:
+    file = tmp_path / "bisect.c"
+    file.write_text(
+        dedent("""\
+        void first() {}
+        void second() {}
+        void third() {}
+    """)
+    )
+    tu = CLangParser().load(file)
+    assert len(tu.nodes) == 3
+
+    for node in tu.nodes:
+        node_start = node.raw_node.extent.start.offset
+        node_end = node.raw_node.extent.end.offset
+        for token in node.tokens:
+            assert node_start <= token.cached_offset_start <= node_end
