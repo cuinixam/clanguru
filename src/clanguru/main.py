@@ -1,4 +1,6 @@
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import typer
@@ -25,6 +27,24 @@ from clanguru.object_analyzer import (
 package_name = "clanguru"
 
 app = typer.Typer(name=package_name, help="C language utils and tools based on the libclang module.", no_args_is_help=True, add_completion=False)
+
+
+@contextmanager
+def _profiling(profile_path: Path) -> Iterator[None]:
+    import cProfile
+    import pstats
+
+    profiler = cProfile.Profile()
+    profiler.enable()
+    try:
+        yield
+    finally:
+        profiler.disable()
+        profiler.dump_stats(str(profile_path))
+        stats = pstats.Stats(profiler)
+        stats.sort_stats(pstats.SortKey.CUMULATIVE)
+        stats.print_stats(40)
+        logger.info(f"Profile saved to {profile_path}. Visualize with: snakeviz {profile_path}")
 
 
 @app.callback(invoke_without_command=True)
@@ -180,7 +200,13 @@ def analyze(
 def main() -> int:
     try:
         setup_logger()
-        app()
+        profile = "--profile" in sys.argv
+        if profile:
+            sys.argv.remove("--profile")
+            with _profiling(Path("clanguru_profile.prof")):
+                app()
+        else:
+            app()
         return 0
     except UserNotificationException as e:
         logger.error(f"{e}")
