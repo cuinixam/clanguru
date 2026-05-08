@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.20.0 (2026-05-08)
+
+### Features
+
+- Use token caching to drastically reduce parsing times ([`b952172`](https://github.com/cuinixam/clanguru/commit/b95217279df25a0bf7659f993c09a25b4ab2cc64))
+
 ## v0.19.0 (2026-05-06)
 
 ### Features
