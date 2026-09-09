@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from clanguru.compilation_options_manager import CompileCommand
+from clanguru.compilation_options_manager import CompilationDatabase, CompileCommand
 from clanguru.object_analyzer import (
     NmExecutor,
     ObjectDependencies,
@@ -307,3 +307,36 @@ def test_create_filter_tree(object_report_data_list: tuple[Path, list[ObjectRepo
     assert drivers_node.name == "drivers/src"
     assert drivers_node.id == "mcal/src/drivers/src"
     assert len(drivers_node.children) == 0
+
+
+@pytest.mark.parametrize(
+    ("compiler", "sibling_nm", "expected"),
+    [
+        ("riscv64-zephyr-elf-gcc", True, "riscv64-zephyr-elf-nm"),
+        ("arm-none-eabi-g++", True, "arm-none-eabi-nm"),
+        ("riscv64-zephyr-elf-gcc", False, "nm"),
+        ("clang", False, "nm"),
+        (None, False, "nm"),
+    ],
+)
+def test_nm_executor_for_compiler(tmp_path: Path, compiler: str | None, sibling_nm: bool, expected: str) -> None:
+    compiler_path = tmp_path / compiler if compiler else None
+    if sibling_nm:
+        (tmp_path / expected).touch()
+
+    nm_executor = NmExecutor.for_compiler(compiler_path)
+
+    assert nm_executor.nm == (expected if expected == "nm" else (tmp_path / expected).as_posix())
+
+
+def test_nm_executor_for_compilation_database(tmp_path: Path) -> None:
+    (tmp_path / "riscv64-zephyr-elf-nm").touch()
+    database = CompilationDatabase(
+        commands=[
+            CompileCommand(directory=tmp_path, file=tmp_path / "a.c", command=f"{tmp_path / 'riscv64-zephyr-elf-gcc'} -c a.c -o a.o"),
+            CompileCommand(directory=tmp_path, file=tmp_path / "b.c", arguments=["clang", "-c", "b.c"]),
+        ]
+    )
+
+    assert NmExecutor.for_compilation_database(database).nm == (tmp_path / "riscv64-zephyr-elf-nm").as_posix()
+    assert NmExecutor.for_compilation_database(CompilationDatabase(commands=[])).nm == "nm"

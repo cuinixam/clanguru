@@ -405,10 +405,35 @@ def create_objects_graph_data_edges(objects_report_data: list[ObjectReportData])
 
 
 class NmExecutor:
-    @staticmethod
-    def run(obj_file: Path) -> ObjectDependencies:
+    """Reads an object's symbols with the nm of the toolchain that produced it."""
+
+    def __init__(self, nm: str = "nm") -> None:
+        self.nm = nm
+
+    @classmethod
+    def for_compiler(cls, compiler: Path | None) -> NmExecutor:
+        """
+        `<prefix>-nm` next to a `<prefix>-gcc` style cross compiler, else the host nm.
+
+        The host nm either refuses foreign objects or, on macOS, prints only local labels
+        and no symbols at all.
+        """
+        if compiler:
+            match = re.fullmatch(r"(.+-)(gcc|g\+\+|cc|c\+\+)", compiler.name)
+            if match:
+                candidate = compiler.with_name(f"{match.group(1)}nm")
+                if candidate.is_file():
+                    return cls(candidate.as_posix())
+        return cls()
+
+    @classmethod
+    def for_compilation_database(cls, database: CompilationDatabase) -> NmExecutor:
+        """One toolchain per database: the first command's compiler names the nm for every object."""
+        return cls.for_compiler(database.commands[0].get_compiler() if database.commands else None)
+
+    def run(self, obj_file: Path) -> ObjectDependencies:
         obj_data = ObjectDependencies(obj_file)
-        executor = SubprocessExecutor(command=["nm", obj_file], capture_output=True, print_output=False)
+        executor = SubprocessExecutor(command=[self.nm, obj_file], capture_output=True, print_output=False)
         completed_process = executor.execute(handle_errors=False)
         if completed_process:
             if completed_process.returncode != 0:
@@ -448,11 +473,12 @@ class NmExecutor:
         return None
 
 
-def parse_objects(obj_files: list[Path], max_workers: int | None = None) -> list[ObjectDependencies]:
+def parse_objects(obj_files: list[Path], max_workers: int | None = None, nm_executor: NmExecutor | None = None) -> list[ObjectDependencies]:
     """Run the nm executor on each object file in parallel, collecting all the resulting ObjectData in the same order as `obj_files`."""
+    nm_executor = nm_executor or NmExecutor()
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         # executor.map preserves input order in its output sequence
-        results = list(pool.map(NmExecutor.run, obj_files))
+        results = list(pool.map(nm_executor.run, obj_files))
 
     return results
 

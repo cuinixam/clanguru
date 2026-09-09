@@ -165,6 +165,10 @@ Generate interactive HTML reports showing object dependencies:
 clanguru analyze --compilation-database compile_commands.json --output-file dependencies.html
 ```
 
+Symbols are read with the toolchain's own `nm`: for a compiler named `<prefix>-gcc` (or
+`-g++`, `-cc`, `-c++`) the `<prefix>-nm` next to it is used, so cross-compiled objects work
+without any option. Otherwise `nm` from the PATH is used.
+
 ### Excel Reports
 
 Create Excel spreadsheets for detailed analysis:

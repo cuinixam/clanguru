@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -298,3 +299,17 @@ def test_debug_html_report() -> None:
         ],
     )
     assert result.exit_code == 0
+
+
+def test_analyze_rejects_objects_without_symbols(tmp_path: Path) -> None:
+    """The host nm on cross-compiled objects prints no symbols and no error; the report must not come out empty."""
+    compile_db = tmp_path / "compile_commands.json"
+    compile_db.write_text(
+        json.dumps([{"directory": str(tmp_path), "command": "riscv64-zephyr-elf-gcc -c a.c -o a.o", "file": str(tmp_path / "a.c"), "output": str(tmp_path / "a.o")}])
+    )
+
+    with patch("clanguru.main.parse_objects", return_value=[ObjectDependencies(path=tmp_path / "a.o")]):
+        result = runner.invoke(app, ["analyze", "--compilation-database", str(compile_db), "--output-file", str(tmp_path / "out.html")])
+
+    assert result.exit_code == 1
+    assert "No symbols in any object file" in str(result.exception)

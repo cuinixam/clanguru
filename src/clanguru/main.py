@@ -116,7 +116,7 @@ def mock(
     # Determine which symbols to use
     if partial_object_file:
         # If partial object file is provided, use symbols from it
-        object_data = NmExecutor.run(partial_object_file)
+        object_data = NmExecutor().run(partial_object_file)
         symbols = list(object_data.required_symbols)
         logger.info(f"Extracted {len(symbols)} symbols from {partial_object_file}: {symbols}")
     elif symbol:
@@ -176,8 +176,11 @@ def analyze(
     object_files = compilation_database_data.get_output_files()
     if not object_files:
         raise UserNotificationException("No object files found in the compilation database.")
-    logger.info("Parse objects files")
-    object_data = parse_objects(object_files)
+    nm_executor = NmExecutor.for_compilation_database(compilation_database_data)
+    logger.info(f"Parse objects files with {nm_executor.nm}")
+    object_data = parse_objects(object_files, nm_executor=nm_executor)
+    if not any(obj.symbols for obj in object_data):
+        raise UserNotificationException(f"No symbols in any object file. '{nm_executor.nm}' is probably not the nm of the toolchain that built them.")
     print_objects_data_statistics(object_data)
 
     # Apply additional user-specified exclude patterns if provided

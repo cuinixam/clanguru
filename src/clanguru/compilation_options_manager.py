@@ -34,6 +34,14 @@ class CompileCommand(DataClassDictMixin):
     class Config(BaseConfig):
         code_generation_options: ClassVar[list[str]] = [TO_DICT_ADD_OMIT_NONE_FLAG]
 
+    def get_compiler(self) -> Path | None:
+        """The compiler as the build system invoked it, from the first token of the command."""
+        if self.arguments:
+            return Path(self.arguments[0])
+        if self.command:
+            return Path(self.command.split()[0])
+        return None
+
     def get_compile_options(self) -> list[str]:
         options = []
         if self.arguments:

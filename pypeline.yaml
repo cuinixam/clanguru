@@ -9,7 +9,7 @@ pipeline:
     module: pypeline.steps.create_venv
     config:
       package_manager: uv>=0
-      python_version: 3.13
+      python_version: "3.13"
   - step: GenerateEnvSetupScript
     module: pypeline.steps.env_setup_script
   - step: PreCommit
