@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.21.0 (2026-09-09)
+
+### Features
+
+- Try to find the correct nm executor for the compiler ([`9898e83`](https://github.com/cuinixam/clanguru/commit/9898e835f34eb84c52d1f5233f8f7c9c86f7d6a0))
+
 ## v0.20.0 (2026-05-08)
 
 ### Features
