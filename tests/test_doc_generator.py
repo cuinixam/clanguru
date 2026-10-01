@@ -320,6 +320,20 @@ def test_doc_structure_for_gtest_files(tmp_path: Path, gtest_include_path: Path)
     assert output_file.read_text() == expected_output
 
 
+def test_doc_structure_lists_only_the_declarations_of_the_source_file(tmp_path: Path) -> None:
+    (tmp_path / "helper.h").write_text("static inline int helper(void) { return 1; }\nclass HeaderClass {};\n", newline="\n")
+    source_file = tmp_path / "source.cc"
+    source_file.write_text('#include "helper.h"\nint own_function() { return helper(); }\nclass OwnClass {};\n', newline="\n")
+    compile_db = make_compile_commands(tmp_path, source_file, [tmp_path])
+
+    doc_structure = generate_doc_structure(CLangParser().load(source_file, CompilationOptionsManager(compile_db)))
+
+    assert {section.title: [sub.title for sub in section.subsections] for section in doc_structure.sections} == {
+        "Functions": ["own_function"],
+        "Classes": ["OwnClass"],
+    }
+
+
 def test_generate_documentation(c_source: TranslationUnit, tmp_path: Path) -> None:
     # Generate Markdown documentation
     md_file = tmp_path / "test.md"

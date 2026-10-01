@@ -2,15 +2,6 @@
 
 ## Functions
 
-### RUN_ALL_TESTS
-
-```{code-block} c
-:linenos:
-:lineno-start: 2334
-
-inline int RUN_ALL_TESTS() { return ::testing::UnitTest::GetInstance()->Run(); }
-```
-
 ### gtest_BlinkPeriodTestsBlinkPeriodTest_EvalGenerator_
 
 ```{code-block} c

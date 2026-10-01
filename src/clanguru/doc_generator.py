@@ -9,7 +9,7 @@ from typing import Union
 from jinja2 import Environment, StrictUndefined, TemplateError, UndefinedError, select_autoescape
 from py_app_dev.core.exceptions import UserNotificationException
 
-from clanguru.cparser import CLangParser, Token, TranslationUnit
+from clanguru.cparser import CLangParser, Declaration, Token, TranslationUnit
 
 GTEST_MACROS = ("TEST", "TEST_P", "TEST_F", "TYPED_TEST", "TYPED_TEST_P")
 _GTEST_DECL_RE = re.compile(rf"^\s*(?:{'|'.join(GTEST_MACROS)})\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)")
@@ -350,6 +350,12 @@ def _build_declaration_section(name: str, description_tokens: list[Token], body_
     return section
 
 
+def _is_declared_in(declaration: Declaration, translation_unit: TranslationUnit) -> bool:
+    """Whether the declaration is located in the translation unit's own source file, not in an included header."""
+    location_file = declaration.origin.raw_node.location.file
+    return location_file is not None and Path(location_file.name).resolve() == translation_unit.source_file.resolve()
+
+
 def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsFormat = DocsFormat.md) -> DocStructure:
     """
     Generate documentation structure from a translation unit.
@@ -360,14 +366,14 @@ def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsF
     tags = [docs_format.format_tag, "docs"]
 
     doc = DocStructure(translation_unit.source_file.name)
-    functions = [f for f in CLangParser.get_functions(translation_unit) if f.is_definition]
+    functions = [f for f in CLangParser.get_functions(translation_unit) if f.is_definition and _is_declared_in(f, translation_unit)]
     if functions:
         functions_section = Section("Functions")
         doc.add_section(functions_section)
         for func in functions:
             functions_section.add_subsection(_build_declaration_section(func.name, func.description_tokens, func.body.content, func.body.start_line, tags))
 
-    classes = CLangParser.get_classes(translation_unit)
+    classes = [c for c in CLangParser.get_classes(translation_unit) if _is_declared_in(c, translation_unit)]
     if classes:
         classes_section = Section("Classes")
         doc.add_section(classes_section)
