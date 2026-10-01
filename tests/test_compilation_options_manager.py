@@ -184,6 +184,11 @@ def test_clean_up_arguments_with_partial_paths(compile_command):
             [],
             id="no_includes_or_defines",
         ),
+        pytest.param(
+            ["gcc", "-isystem", "/sys/inc", "-iquote/quoted", "-idirafter", "/after", "-include", "forced.h", "-imacros/macros.h", "-UNDEBUG", "-c", "/home/user/project/input.c"],
+            ["-isystem", "/sys/inc", "-iquote/quoted", "-idirafter", "/after", "-include", "forced.h", "-imacros/macros.h", "-UNDEBUG"],
+            id="system_includes_forced_includes_and_undefines",
+        ),
     ],
 )
 def test_get_includes_and_defines(compile_command: CompileCommand, arguments: list[str], expected: list[str]) -> None:

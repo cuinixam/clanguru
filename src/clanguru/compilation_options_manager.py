@@ -51,7 +51,7 @@ class CompileCommand(DataClassDictMixin):
         return self.clean_up_arguments(options)
 
     def get_includes_and_defines(self) -> list[str]:
-        return _filter_includes_and_defines(self.get_compile_options())
+        return _filter_preprocessor_options(self.get_compile_options())
 
     def get_file_path(self) -> Path:
         return self.file if self.file.is_absolute() else self.directory / self.file
@@ -151,14 +151,18 @@ class CompilationOptionsManager:
             commands: list[CompileCommand] = self.compilation_database.get_compile_commands(file)
             if commands:
                 return commands[0].get_includes_and_defines()
-        return [] if self.no_default else _filter_includes_and_defines(self.default_options)
+        return [] if self.no_default else _filter_preprocessor_options(self.default_options)
 
     def set_default_options(self, options: list[str]) -> None:
         self.default_options = options
 
 
-def _filter_includes_and_defines(options: list[str]) -> list[str]:
-    """Keep only -I and -D flags (including their values when passed as separate arguments)."""
+#: Options that decide what the preprocessor sees: include paths, macros and forced includes.
+PREPROCESSOR_OPTIONS = ("-I", "-D", "-U", "-isystem", "-iquote", "-idirafter", "-include", "-imacros")
+
+
+def _filter_preprocessor_options(options: list[str]) -> list[str]:
+    """Keep only the preprocessor options (including their values when passed as separate arguments)."""
     filtered: list[str] = []
     take_next = False
     for option in options:
@@ -166,10 +170,10 @@ def _filter_includes_and_defines(options: list[str]) -> list[str]:
             filtered.append(option)
             take_next = False
             continue
-        if option in ("-I", "-D"):
+        if option in PREPROCESSOR_OPTIONS:
             filtered.append(option)
             take_next = True
-        elif option.startswith(("-I", "-D")):
+        elif option.startswith(PREPROCESSOR_OPTIONS):
             filtered.append(option)
     return filtered
 
