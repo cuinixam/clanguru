@@ -1,4 +1,5 @@
 import json
+import os
 from collections.abc import Generator
 from pathlib import Path
 
@@ -240,6 +241,43 @@ def test_filter_compilation_database(tmp_path: Path) -> None:
     assert len(filtered.commands) == 3
     kept_files = sorted(cmd.get_file_path().name for cmd in filtered.commands)
     assert kept_files == ["a.c", "b.c", "d.cc"]
+
+
+@pytest.mark.parametrize(
+    "command, expected_compiler, expected_options",
+    [
+        pytest.param(
+            'gcc -DEMPTY="" -DSTUFF -I/usr/include -c input.c -o output.o',
+            Path("gcc"),
+            ["-DEMPTY=", "-DSTUFF", "-I/usr/include"],
+            id="quoted_empty_define",
+        ),
+        pytest.param(
+            r'"C:\Program Files\gcc\bin\gcc.exe" -DSTUFF -c input.c -o output.o',
+            Path(r"C:\Program Files\gcc\bin\gcc.exe"),
+            ["-DSTUFF"],
+            id="windows_compiler_path_with_spaces",
+        ),
+        pytest.param(
+            r'C:\tools\gcc.exe -DVERSION="1.0" -IC:\inc -c input.c -o output.o',
+            Path(r"C:\tools\gcc.exe"),
+            ["-DVERSION=1.0", r"-IC:\inc"],
+            marks=pytest.mark.skipif(os.name != "nt", reason="an unquoted backslash is an escape outside Windows"),
+            id="windows_backslashes_kept",
+        ),
+        pytest.param(
+            r"gcc -DVERSION=\"1.0\" -I/usr/include -c input.c -o output.o",
+            Path("gcc"),
+            ['-DVERSION="1.0"', "-I/usr/include"],
+            marks=pytest.mark.skipif(os.name == "nt", reason="Windows has no backslash escape to resolve"),
+            id="posix_escaped_string_define",
+        ),
+    ],
+)
+def test_command_string_is_split_with_shell_quoting(command: str, expected_compiler: Path, expected_options: list[str]) -> None:
+    compile_command = CompileCommand(directory=Path("/project"), file=Path("input.c"), command=command, output=Path("output.o"))
+    assert compile_command.get_compiler() == expected_compiler
+    assert compile_command.get_compile_options() == expected_options
 
 
 def test_to_json(tmp_path: Path) -> None:
