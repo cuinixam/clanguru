@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import shlex
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,24 @@ from mashumaro.config import TO_DICT_ADD_OMIT_NONE_FLAG, BaseConfig
 from mashumaro.mixins.json import DataClassJSONMixin
 from mashumaro.types import SerializableType
 from py_app_dev.core.exceptions import UserNotificationException
+
+
+def split_command(command: str) -> list[str]:
+    r"""
+    Split a compilation database ``command`` string into arguments.
+
+    Quotes are removed, so ``-DMACRO=""`` yields an empty macro value instead of the
+    string literal ``""``.
+
+    The backslash rule follows the shell that wrote the command. On Windows it is a path
+    separator, so ``-IC:\inc`` must survive intact. Everywhere else it is an escape, so
+    ``-DVERSION=\"1.0\"`` must yield the quoted value ``"1.0"``.
+    """
+    lexer = shlex.shlex(command, posix=True)
+    lexer.whitespace_split = True
+    if os.name == "nt":
+        lexer.escape = ""
+    return list(lexer)
 
 
 class PathField(SerializableType):
@@ -39,7 +58,7 @@ class CompileCommand(DataClassDictMixin):
         if self.arguments:
             return Path(self.arguments[0])
         if self.command:
-            return Path(self.command.split()[0])
+            return Path(split_command(self.command)[0])
         return None
 
     def get_compile_options(self) -> list[str]:
@@ -47,7 +66,7 @@ class CompileCommand(DataClassDictMixin):
         if self.arguments:
             options = self.arguments
         if self.command:
-            options = self.command.split()
+            options = split_command(self.command)
         return self.clean_up_arguments(options)
 
     def get_includes_and_defines(self) -> list[str]:
