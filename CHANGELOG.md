@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.21.2 (2026-10-12)
+
+### Bug fixes
+
+- Dry run release does not work for fork pull requests ([`d8632c9`](https://github.com/cuinixam/clanguru/commit/d8632c9fa8880180ce6642fcb068b2adbb9520be))
+- Split compilation database command strings with shell quoting rules ([`2ab1e06`](https://github.com/cuinixam/clanguru/commit/2ab1e06e22d0722fb0bac8d773de4e12908ecc71))
+
 ## v0.21.1 (2026-10-12)
 
 ### Bug fixes
