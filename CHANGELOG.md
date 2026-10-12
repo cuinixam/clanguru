@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.21.1 (2026-10-12)
+
+### Bug fixes
+
+- Keep every preprocessor option of the compile command ([`832f3ca`](https://github.com/cuinixam/clanguru/commit/832f3ca718b445c1d4e13a01cbab9aeed0b37970))
+- Document only the declarations of the source file itself ([`183b688`](https://github.com/cuinixam/clanguru/commit/183b68802ea52257358cac91e3404fabb3e7e84b))
+
 ## v0.21.0 (2026-09-09)
 
 ### Features
