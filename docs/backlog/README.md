@@ -14,9 +14,9 @@
 - [CLG-005 — Readability options for the analyze graph](clg-005.md)
 - [CLG-004 — Parse once, reuse the translation unit](clg-004.md)
 - [CLG-003 — Generate component interface docs](clg-003.md)
-- [CLG-002 — Filter object dependencies by the linked map or ELF file](clg-002.md)
 
 ### In Progress
+- [CLG-002 — Filter object dependencies by the linked map or ELF file](clg-002.md)
 - [CLG-001 — Backlog refinement](clg-001.md)
 
 ### Done
