@@ -103,6 +103,14 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
 - Pytest fixtures: use them to avoid code duplication; use `conftest.py` for shared fixtures. Use `tmp_path` for file system operations.
 - **Never suppress linter/type-checker warnings** by adding ignore rules to `pyproject.toml` or `# noqa` / `# type: ignore` comments. Always fix the underlying code instead.
 
+## Backlog
+
+Open work lives in `docs/backlog/`, one file per item with prefix `CLG`. The item file is the only source of truth for its status; `README.md` holds the generated table of contents. Use the `refinement` and `backlog-ops` skills of the `xxthunder-dev-skills` plugin, which run `backlog.py` for IDs, status and the table of contents.
+
+- Every item open to contributors has a GitHub issue, recorded as `**Issue**: #N`. The issue holds the discussion; its body only links to the item and never copies it.
+- The pull request that closes an item says `Closes #N`.
+- A commit that touches only files under `docs/backlog/` may be pushed directly to `main`. Any commit that touches other files goes through a pull request. CI skips backlog-only changes.
+
 ## Definition of Done
 
 Changes are NOT complete until:
