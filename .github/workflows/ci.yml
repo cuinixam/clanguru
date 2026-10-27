@@ -4,7 +4,11 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'docs/backlog/**'
   pull_request:
+    paths-ignore:
+      - 'docs/backlog/**'
 
 concurrency:
   group: ${{ github.head_ref || github.run_id }}

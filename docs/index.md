@@ -24,3 +24,10 @@ internals/index.md
 about/index.md
 
 ```
+
+```{toctree}
+:hidden:
+:caption: Development
+
+backlog/README
+```

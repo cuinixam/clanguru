@@ -16,11 +16,11 @@ Report bugs to [our issue page][gh-issues]. If you are reporting a bug, please i
 
 ### Fix Bugs
 
-Look through the GitHub issues for bugs. Anything tagged with "bug" and "help wanted" is open to whoever wants to implement it.
+Look through the [backlog][backlog] for open items. Each item open to contributors links to a GitHub issue; comment there before you start, so that others know it is taken.
 
 ### Implement Features
 
-Look through the GitHub issues for features. Anything tagged with "enhancement" and "help wanted" is open to whoever wants to implement it.
+Look through the [backlog][backlog] for open features. Each item open to contributors links to a GitHub issue; comment there before you start, so that others know it is taken.
 
 ### Write Documentation
 
@@ -115,3 +115,4 @@ $ pytest tests
 The deployment should be automated and can be triggered from the Semantic Release workflow in GitHub. The next version will be based on [the commit logs](https://python-semantic-release.readthedocs.io/en/latest/commit-log-parsing.html#commit-log-parsing). This is done by [python-semantic-release](https://python-semantic-release.readthedocs.io/en/latest/index.html) via a GitHub action.
 
 [gh-issues]: https://github.com/cuinixam/clanguru/issues
+[backlog]: docs/backlog/README.md
