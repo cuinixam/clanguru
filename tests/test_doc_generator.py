@@ -10,14 +10,18 @@ from clanguru.cparser import CLangParser, TranslationUnit
 from clanguru.doc_generator import (
     CodeContent,
     DocsFormat,
+    DocStructure,
     GTestInfo,
     MarkdownFlavour,
     MarkdownFormatter,
+    OutputFormatter,
     RSTFormatter,
     Section,
     TextContent,
+    TraceContent,
     _detect_gtest,
     _render_doc_template,
+    _split_traces,
     generate_doc_structure,
     generate_documentation,
 )
@@ -582,6 +586,25 @@ def test_rst_formatter_format_table() -> None:
 
 
 @pytest.mark.parametrize(
+    ("formatter", "title", "expected"),
+    [
+        (RSTFormatter(), "Debounce door switch", ".. impl:: Debounce door switch\n   :id: IMPL_1\n   :links: REQ_1\n"),
+        (RSTFormatter(), "", ".. impl::\n   :id: IMPL_1\n   :links: REQ_1\n"),
+        (MarkdownFormatter(MarkdownFlavour.Myst), "Debounce door switch", "```{impl} Debounce door switch\n:id: IMPL_1\n:links: REQ_1\n```\n"),
+        (MarkdownFormatter(MarkdownFlavour.Raw), "Debounce door switch", "```{impl} Debounce door switch\n:id: IMPL_1\n:links: REQ_1\n```\n"),
+        (MarkdownFormatter(MarkdownFlavour.Myst), "", "```{impl}\n:id: IMPL_1\n:links: REQ_1\n```\n"),
+    ],
+)
+def test_formatters_render_trace(formatter: OutputFormatter, title: str, expected: str) -> None:
+    section = Section("Functions")
+    section.add_content(TraceContent("impl", title, {"id": "IMPL_1", "links": "REQ_1"}))
+    doc = DocStructure("Doc")
+    doc.add_section(section)
+
+    assert expected in formatter.format(doc)
+
+
+@pytest.mark.parametrize(
     ("body_code", "expected"),
     [
         ("TEST(suite, case)", GTestInfo(suite="suite", case="case")),
@@ -674,6 +697,76 @@ def test_multiple_doc_blocks_in_single_comment(tmp_path: Path) -> None:
 
     text_blocks = [c.text for c in func_section.content if isinstance(c, TextContent)]
     assert text_blocks == ["First block.", "Second block.", "Third block."]
+
+
+def test_traces_are_extracted_in_source_order(tmp_path: Path) -> None:
+    source = tmp_path / "traces.c"
+    source.write_text(
+        dedent("""\
+        /**
+         * Ignored prose.
+         *
+         * @trace Standalone
+         * type: impl
+         * id: IMPL_1
+         * implements: A,
+         *     B
+         *
+         * More ignored prose.
+         *
+         * @docs
+         * Intro.
+         * \\trace Inside
+         * type: spec
+         *
+         * Outro.
+         * @enddocs
+         *
+         * @rst
+         * @trace Rst only
+         * type: impl
+         * @endrst
+         */
+        void traced() {
+        }
+        """),
+        newline="\n",
+    )
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md)
+    content = doc.sections[0].subsections[0].content
+    assert content[:-1] == [
+        TraceContent("impl", "Standalone", {"id": "IMPL_1", "implements": "A, B"}),
+        TextContent("Intro."),
+        TraceContent("spec", "Inside", {}),
+        TextContent("Outro."),
+    ]
+
+
+def test_trace_title_is_rendered_with_jinja(tmp_path: Path) -> None:
+    source = tmp_path / "gt.cc"
+    source.write_text(
+        dedent("""\
+        #define TEST(s, n) class s##_##n {}
+        /**
+         * @trace {{ gtest.test }}
+         * type: test
+         */
+        TEST(my_suite, my_case)
+        """),
+        newline="\n",
+    )
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md)
+    class_section = doc.sections[0].subsections[0]
+    assert assert_element_of_type(class_section.content, TraceContent).title == "my_suite.my_case"
+
+
+@pytest.mark.parametrize(
+    "trace_lines",
+    ["Title\nid: X", "Title\ntype: impl\nnot a key value line", "Title\n  stray: continuation\ntype: impl"],
+)
+def test_malformed_trace_raises_with_declaration_name(trace_lines: str) -> None:
+    with pytest.raises(UserNotificationException, match="decl_name"):
+        _split_traces(f"@trace {trace_lines}", "decl_name")
 
 
 def test_generate_documentation_utf8_encoding(tmp_path: Path) -> None:

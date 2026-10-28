@@ -36,7 +36,7 @@ This approach is ideal for projects that need quick, straightforward documentati
 
 ### Tagged Documentation Blocks
 
-By default, the comment above a declaration is emitted verbatim. You can scope the output to specific blocks inside that comment by wrapping them in a tag pair:
+Only tagged blocks (and `@trace` blocks, see below) reach the output. All other comment text is ignored. Wrap the text you want to emit in a tag pair:
 
 | Opening | Closing     | When it is emitted                                     |
 | ------- | ----------- | ------------------------------------------------------ |
@@ -44,7 +44,7 @@ By default, the comment above a declaration is emitted verbatim. You can scope t
 | `@md`   | `@endmd`    | Only when generating Markdown or Myst Markdown.        |
 | `@rst`  | `@endrst`   | Only when generating RestructuredText.                 |
 
-A comment may contain multiple tagged blocks; they are emitted in source order. Untagged prose is ignored when at least one tag is present. Tags also accept the backslash form (`\docs`/`\endrst`/…) to play nicely with Doxygen-flavoured comments.
+A comment may contain multiple tagged blocks; they are emitted in source order. Tags also accept the backslash form (`\docs`/`\endrst`/…) to play nicely with Doxygen-flavoured comments.
 
 ```c
 /**
@@ -55,6 +55,51 @@ A comment may contain multiple tagged blocks; they are emitted in source order. 
  */
 int sum(int a, int b) { return a + b; }
 ```
+
+### Trace Blocks
+
+A `@trace` block describes a `sphinx-needs` item in a format-neutral syntax. Clanguru renders it as an RST directive or as a MyST fence, so you do not rewrite the comment when you switch the output format.
+
+```c
+/**
+ * @trace Debounce door switch
+ * type: impl
+ * id: SWIMPL_DS-001
+ * implements: SWDD_DS-100,
+ *   SWDD_DS-101
+ */
+int debounce(void) { return 0; }
+```
+
+RST output:
+
+```rst
+.. impl:: Debounce door switch
+   :id: SWIMPL_DS-001
+   :implements: SWDD_DS-100, SWDD_DS-101
+```
+
+MyST output (plain Markdown output gets the same fence):
+
+````md
+```{impl} Debounce door switch
+:id: SWIMPL_DS-001
+:implements: SWDD_DS-100, SWDD_DS-101
+```
+````
+
+Rules:
+
+- The first line is the title. `key: value` option lines follow. A trace without a title is allowed and renders as `.. impl::`.
+- The trace ends at the first empty line, at `@enddocs`, or at the end of the comment. There is no end tag.
+- A line indented deeper than the keys continues the previous value. Clanguru joins the parts with one space, so each option stays on one line.
+- `type` is required. It is the directive name. Any name is accepted; clanguru does not read the `needs_types` of your project.
+- Type and links are separate options, because a link name does not tell the type.
+- A trace has no content.
+- A `@trace` block works inside and outside a `@docs` block, in source order. The backslash form `\trace` also works.
+- A `@trace` inside an `@rst` or `@md` block belongs to that block and appears only in that output format.
+- Jinja placeholders are resolved before the trace is rendered, as in the other blocks.
+- A trace without `type`, or with a line that is neither `key: value` nor a continuation, stops the run with an error that names the declaration.
 
 ### Placeholder Expansion
 

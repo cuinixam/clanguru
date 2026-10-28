@@ -53,7 +53,14 @@ class CodeContent:
     start_line: int | None = None
 
 
-SectionContent = Union[TextContent, CodeContent]
+@dataclass
+class TraceContent:
+    directive: str
+    title: str
+    options: dict[str, str]
+
+
+SectionContent = Union[TextContent, CodeContent, TraceContent]
 
 
 class Section:
@@ -105,6 +112,11 @@ class OutputFormatter(ABC):
         pass
 
     @abstractmethod
+    def format_trace(self, content: TraceContent) -> str:
+        """Format a sphinx-needs trace directive."""
+        pass
+
+    @abstractmethod
     def file_extension(self) -> str:
         """Return the file extension for the formatter."""
         pass
@@ -147,6 +159,8 @@ class MarkdownFormatter(OutputFormatter):
                 output += self.format_text(content.text) + "\n\n"
             elif isinstance(content, CodeContent):
                 output += self.format_code(content) + "\n\n"
+            elif isinstance(content, TraceContent):
+                output += self.format_trace(content) + "\n\n"
         for subsection in section.subsections:
             output += self._format_section(subsection, level + 1)
         return output
@@ -202,6 +216,10 @@ class MarkdownFormatter(OutputFormatter):
             return f"{{% raw %}}\n{result}\n{{% endraw %}}"
         return result
 
+    def format_trace(self, content: TraceContent) -> str:
+        header = f"```{{{content.directive}}} {content.title}".rstrip()
+        return "\n".join([header, *(f":{key}: {value}" for key, value in content.options.items()), "```"]) + "\n"
+
     def format_table(self, headers: list[str], rows: list[list[str]]) -> str:
         header_line = "| " + " | ".join(headers) + " |"
         separator_line = "| " + " | ".join(["---"] * len(headers)) + " |"
@@ -233,6 +251,8 @@ class RSTFormatter(OutputFormatter):
                 output += self.format_text(content.text) + "\n\n"
             elif isinstance(content, CodeContent):
                 output += self.format_code(content) + "\n\n"
+            elif isinstance(content, TraceContent):
+                output += self.format_trace(content) + "\n\n"
         for subsection in section.subsections:
             output += self._format_section(subsection, level + 1)
         return output
@@ -262,6 +282,10 @@ class RSTFormatter(OutputFormatter):
         if self.jinja_raw_tags:
             return f"{{% raw %}}\n{code_block}{{% endraw %}}\n"
         return code_block
+
+    def format_trace(self, content: TraceContent) -> str:
+        header = f".. {content.directive}:: {content.title}".rstrip()
+        return "\n".join([header, *(f"   :{key}: {value}" for key, value in content.options.items())]) + "\n"
 
     def _indent_code(self, code: str) -> str:
         return "\n".join(f"    {line}" for line in code.split("\n"))
@@ -303,13 +327,54 @@ def _extract_doc_contents(raw_content: str, accepted_tags: list[str]) -> list[st
 
     The opening tag must appear at the start of a line (or the start of the string)
     to avoid matching tags that appear mid-sentence in prose text.
+    Standalone `@trace` blocks run to the first blank line and are returned with their tag line.
+    Blocks of tags that are not accepted are dropped, together with any trace inside them.
     """
-    if not accepted_tags:
-        return []
-    tags_pattern = "|".join(re.escape(tag) for tag in accepted_tags)
-    pattern = rf"(?:^|(?<=\n))(?:@|\\)({tags_pattern})\s*(.*?)\s*(?:@|\\)end\1"
-    matches = re.finditer(pattern, raw_content, flags=re.DOTALL)
-    return [textwrap.dedent(match.group(2)) for match in matches]
+    pattern = r"(?:^|(?<=\n))(?:@|\\)(?:(docs|md|rst)\s*(.*?)\s*(?:@|\\)end\1|(trace\b.*?)(?=\n[ \t]*\n|\Z))"
+    contents: list[str] = []
+    for match in re.finditer(pattern, raw_content, flags=re.DOTALL):
+        if match.group(3):
+            contents.append(f"@{match.group(3)}")
+        elif match.group(1) in accepted_tags:
+            contents.append(textwrap.dedent(match.group(2)))
+    return contents
+
+
+_TRACE_SPLIT_RE: re.Pattern[str] = re.compile(r"^(?:@|\\)trace\b(.*?)(?=\n[ \t]*\n|\Z)", flags=re.DOTALL | re.MULTILINE)
+
+
+def _split_traces(content: str, declaration_name: str) -> list[SectionContent]:
+    """Cut a rendered block into text and trace items in source order."""
+    parts = _TRACE_SPLIT_RE.split(content)
+    items: list[SectionContent] = []
+    for index, part in enumerate(parts):
+        if index % 2:
+            items.append(_parse_trace(part, declaration_name))
+        elif part.strip():
+            items.append(TextContent(part.strip()))
+    return items
+
+
+def _parse_trace(body: str, declaration_name: str) -> TraceContent:
+    """Parse the title line and the `key: value` lines of a trace; indented lines continue the previous value."""
+    title, _, rest = body.partition("\n")
+    options: dict[str, str] = {}
+    last_key = ""
+    for line in textwrap.dedent(rest).splitlines():
+        is_continuation = line[:1].isspace()
+        if is_continuation and not last_key:
+            raise UserNotificationException(f"Trace '{title.strip()}' of '{declaration_name}' has a continuation line before the first option: '{line.strip()}'")
+        if is_continuation:
+            options[last_key] += f" {line.strip()}"
+            continue
+        key, separator, value = line.partition(":")
+        if not separator or not key.strip():
+            raise UserNotificationException(f"Trace '{title.strip()}' of '{declaration_name}' has a line that is not 'key: value': '{line}'")
+        last_key = key.strip()
+        options[last_key] = value.strip()
+    if "type" not in options:
+        raise UserNotificationException(f"Trace '{title.strip()}' of '{declaration_name}' has no 'type' option")
+    return TraceContent(options.pop("type"), title.strip(), options)
 
 
 def _detect_gtest(body_code: str) -> GTestInfo | None:
@@ -345,7 +410,7 @@ def _build_declaration_section(name: str, description_tokens: list[Token], body_
     for token in description_tokens:
         raw = CLangParser.get_comment_content(token)
         for content in _extract_doc_contents(raw, tags):
-            section.add_content(TextContent(_render_doc_template(content, name, gtest)))
+            section.content.extend(_split_traces(_render_doc_template(content, name, gtest), name))
     section.add_content(CodeContent(code=body_code, start_line=body_start_line))
     return section
 
