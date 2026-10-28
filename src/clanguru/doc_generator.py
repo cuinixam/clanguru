@@ -81,6 +81,7 @@ class DocStructure:
 
     def __init__(self, title: str):
         self.title = title
+        self.content: list[SectionContent] = []
         self.sections: list[Section] = []
 
     def add_section(self, section: Section) -> None:
@@ -100,6 +101,17 @@ class OutputFormatter(ABC):
     def format(self, doc: DocStructure) -> str:
         """Format the entire documentation structure."""
         pass
+
+    def _format_contents(self, contents: list[SectionContent]) -> str:
+        output = ""
+        for content in contents:
+            if isinstance(content, TextContent):
+                output += self.format_text(content.text) + "\n\n"
+            elif isinstance(content, CodeContent):
+                output += self.format_code(content) + "\n\n"
+            elif isinstance(content, TraceContent):
+                output += self.format_trace(content) + "\n\n"
+        return output
 
     @abstractmethod
     def format_text(self, text: str) -> str:
@@ -148,19 +160,14 @@ class MarkdownFormatter(OutputFormatter):
 
     def format(self, doc: DocStructure) -> str:
         output = f"# {doc.title}\n\n"
+        output += self._format_contents(doc.content)
         for section in doc.sections:
             output += self._format_section(section, 2)
         return output.rstrip() + "\n"
 
     def _format_section(self, section: Section, level: int) -> str:
         output = f"{'#' * level} {section.title}\n\n"
-        for content in section.content:
-            if isinstance(content, TextContent):
-                output += self.format_text(content.text) + "\n\n"
-            elif isinstance(content, CodeContent):
-                output += self.format_code(content) + "\n\n"
-            elif isinstance(content, TraceContent):
-                output += self.format_trace(content) + "\n\n"
+        output += self._format_contents(section.content)
         for subsection in section.subsections:
             output += self._format_section(subsection, level + 1)
         return output
@@ -239,6 +246,7 @@ class RSTFormatter(OutputFormatter):
 
     def format(self, doc: DocStructure) -> str:
         output = f"{doc.title}\n{'=' * len(doc.title)}\n\n"
+        output += self._format_contents(doc.content)
         for section in doc.sections:
             output += self._format_section(section, 1)
         return output.rstrip() + "\n"
@@ -246,13 +254,7 @@ class RSTFormatter(OutputFormatter):
     def _format_section(self, section: Section, level: int) -> str:
         underlines = "=-~^"
         output = f"{section.title}\n{underlines[level] * len(section.title)}\n\n"
-        for content in section.content:
-            if isinstance(content, TextContent):
-                output += self.format_text(content.text) + "\n\n"
-            elif isinstance(content, CodeContent):
-                output += self.format_code(content) + "\n\n"
-            elif isinstance(content, TraceContent):
-                output += self.format_trace(content) + "\n\n"
+        output += self._format_contents(section.content)
         for subsection in section.subsections:
             output += self._format_section(subsection, level + 1)
         return output
@@ -404,13 +406,18 @@ def _render_doc_template(content: str, declaration_name: str, gtest: GTestInfo |
         raise UserNotificationException(f"Template error in doc block of '{declaration_name}': {error}") from error
 
 
-def _build_declaration_section(name: str, description_tokens: list[Token], body_code: str, body_start_line: int, tags: list[str]) -> Section:
-    section = Section(name)
-    gtest = _detect_gtest(body_code)
-    for token in description_tokens:
+def _collect_comment_contents(name: str, comment_tokens: list[Token], tags: list[str], gtest: GTestInfo | None) -> list[SectionContent]:
+    contents: list[SectionContent] = []
+    for token in comment_tokens:
         raw = CLangParser.get_comment_content(token)
         for content in _extract_doc_contents(raw, tags):
-            section.content.extend(_split_traces(_render_doc_template(content, name, gtest), name))
+            contents.extend(_split_traces(_render_doc_template(content, name, gtest), name))
+    return contents
+
+
+def _build_declaration_section(name: str, description_tokens: list[Token], body_code: str, body_start_line: int, tags: list[str]) -> Section:
+    section = Section(name)
+    section.content.extend(_collect_comment_contents(name, description_tokens, tags, _detect_gtest(body_code)))
     section.add_content(CodeContent(code=body_code, start_line=body_start_line))
     return section
 
@@ -432,13 +439,16 @@ def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsF
 
     doc = DocStructure(translation_unit.source_file.name)
     functions = [f for f in CLangParser.get_functions(translation_unit) if f.is_definition and _is_declared_in(f, translation_unit)]
+    classes = [c for c in CLangParser.get_classes(translation_unit) if _is_declared_in(c, translation_unit)]
+    described = {token for declaration in (*functions, *classes) for token in declaration.description_tokens}
+    free_comments = [token for token in CLangParser.get_file_scope_comments(translation_unit) if token not in described]
+    doc.content.extend(_collect_comment_contents(translation_unit.source_file.name, free_comments, tags, None))
     if functions:
         functions_section = Section("Functions")
         doc.add_section(functions_section)
         for func in functions:
             functions_section.add_subsection(_build_declaration_section(func.name, func.description_tokens, func.body.content, func.body.start_line, tags))
 
-    classes = [c for c in CLangParser.get_classes(translation_unit) if _is_declared_in(c, translation_unit)]
     if classes:
         classes_section = Section("Classes")
         doc.add_section(classes_section)

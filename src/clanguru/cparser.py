@@ -342,6 +342,17 @@ class CLangParser:
         return comments
 
     @staticmethod
+    def get_file_scope_comments(tu: TranslationUnit) -> list[Token]:
+        """Comment tokens of the source file that are not inside a top-level node of that file, in source order."""
+        source_file = tu.source_file.resolve()
+        spans = [
+            (node.raw_node.extent.start.offset, node.raw_node.extent.end.offset)
+            for node in tu.nodes
+            if node.raw_node.location.file is not None and Path(node.raw_node.location.file.name).resolve() == source_file
+        ]
+        return [token for token in tu.tokens if token.is_comment and not any(start <= token.cached_offset_start < end for start, end in spans)]
+
+    @staticmethod
     def get_node_source_code(node: Node) -> SourceCodeSnippet:
         if not isinstance(node.raw_node, Cursor):
             raise ValueError(f"The node {node} is not a valid cursor")
