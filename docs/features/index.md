@@ -56,6 +56,64 @@ A comment may contain multiple tagged blocks; they are emitted in source order. 
 int sum(int a, int b) { return a + b; }
 ```
 
+#### Where blocks may stand
+
+Tagged blocks work in any comment at file level, not only above a function or class:
+
+- A block directly above a function definition or class appears once, in the section of that declaration.
+- Any other file-level block is a free block. This includes the file header and the comments above prototypes, variables, structs and typedefs.
+- Free blocks appear under the file title, before `Functions`, in source order.
+- Free blocks support `@md`, `@rst`, `@trace` and Jinja like declaration blocks. The `gtest` variables are not set. Errors name the source file.
+- Comments inside function bodies, struct or class bodies and other code are ignored.
+
+Source file `demo.c`:
+
+```c
+/**
+ * @docs
+ * Door driver overview.
+ * @enddocs
+ */
+#include <stdint.h>
+
+/** @docs
+ * Timing rules for the door switch.
+ * @enddocs */
+static int timeout_ms;
+
+/**
+ * @docs
+ * Debounces the switch.
+ * @enddocs
+ */
+int debounce(void) { return 0; }
+```
+
+Output (Myst Markdown):
+
+````md
+# demo.c
+
+Door driver overview.
+
+Timing rules for the door switch.
+
+## Functions
+
+### debounce
+
+Debounces the switch.
+
+```{code-block} c
+:linenos:
+:lineno-start: 18
+
+int debounce(void) { return 0; }
+```
+````
+
+Known limit: a comment directly above the first function belongs to that function, even when you mean it as a file header. Blank lines do not separate them. Code such as `#include` does, as in the example above.
+
 ### Trace Blocks
 
 A `@trace` block describes a `sphinx-needs` item in a format-neutral syntax. Clanguru renders it as an RST directive or as a MyST fence, so you do not rewrite the comment when you switch the output format.

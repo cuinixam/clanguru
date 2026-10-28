@@ -13,11 +13,11 @@
 - [CLG-004 — Parse once, reuse the translation unit](clg-004.md)
 
 ### In Progress
-- [CLG-007 — `@docs` blocks in any comment of the file](clg-007.md)
 - [CLG-002 — Filter object dependencies by the linked map or ELF file](clg-002.md)
 - [CLG-001 — Backlog refinement](clg-001.md)
 
 ### Done
+- [CLG-007 — `@docs` blocks in any comment of the file](clg-007.md)
 - [CLG-006 — Format-neutral trace blocks for sphinx-needs items](clg-006.md)
 - [CLG-003 — Generate component interface docs](clg-003.md)
 

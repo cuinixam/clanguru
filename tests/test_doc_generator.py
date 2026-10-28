@@ -785,3 +785,52 @@ def test_generate_documentation_utf8_encoding(tmp_path: Path) -> None:
 
     content = output.read_bytes().decode("utf-8")
     assert "Stra\u00dfe \u00fcber Br\u00fccke" in content
+
+
+@pytest.mark.parametrize(
+    ("formatter", "title_line"),
+    [(MarkdownFormatter(), "# Doc"), (RSTFormatter(), "Doc\n==="), (MarkdownFormatter(MarkdownFlavour.Myst), "# Doc")],
+)
+def test_formatters_render_document_content_between_title_and_sections(formatter: OutputFormatter, title_line: str) -> None:
+    doc = DocStructure("Doc")
+    doc.content.append(TextContent("Free intro."))
+    doc.add_section(Section("Functions"))
+
+    output = formatter.format(doc)
+
+    assert output.index(title_line) < output.index("Free intro.") < output.index("Functions")
+
+
+def test_free_docs_blocks_are_collected_from_file_scope_comments(tmp_path: Path) -> None:
+    (tmp_path / "dep.h").write_text("/** @docs Header text @enddocs */\nvoid dep(void) {}\n", newline="\n")
+    source = tmp_path / "free.c"
+    source.write_text(
+        dedent("""\
+        /** @docs File header @enddocs */
+        #include "dep.h"
+
+        /** @docs About the variable @enddocs */
+        int global_value;
+
+        /** @docs Own block @enddocs */
+        void func(void) {
+            /** @docs Inside function @enddocs */
+        }
+
+        struct data {
+            /** @docs Inside struct @enddocs */
+            int field;
+        };
+        """),
+        newline="\n",
+    )
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md)
+    assert doc.content == [TextContent("File header"), TextContent("About the variable")]
+    assert doc.sections[0].subsections[0].content[:-1] == [TextContent("Own block")]
+
+
+def test_malformed_free_trace_raises_with_file_name(tmp_path: Path) -> None:
+    source = tmp_path / "bad_free.c"
+    source.write_text("/** @trace Title\n * id: X\n */\nint value;\n", newline="\n")
+    with pytest.raises(UserNotificationException, match="bad_free.c"):
+        generate_doc_structure(CLangParser().load(source), DocsFormat.md)
