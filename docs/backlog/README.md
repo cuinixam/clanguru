@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [CLG-008 — Clearer doc block error messages](clg-008.md)
 - [CLG-005 — Readability options for the analyze graph](clg-005.md)
 - [CLG-004 — Parse once, reuse the translation unit](clg-004.md)
 
