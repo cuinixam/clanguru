@@ -834,3 +834,11 @@ def test_malformed_free_trace_raises_with_file_name(tmp_path: Path) -> None:
     source.write_text("/** @trace Title\n * id: X\n */\nint value;\n", newline="\n")
     with pytest.raises(UserNotificationException, match="bad_free.c"):
         generate_doc_structure(CLangParser().load(source), DocsFormat.md)
+
+
+@pytest.mark.parametrize(("condition", "expected"), [("0", []), ("1", [TextContent("Variant text")])])
+def test_free_docs_blocks_in_skipped_code_are_ignored(tmp_path: Path, condition: str, expected: list[TextContent]) -> None:
+    source = tmp_path / "skipped.c"
+    source.write_text(f"#if {condition}\n/** @docs Variant text @enddocs */\nint value;\n#endif\n", newline="\n")
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md)
+    assert doc.content == expected

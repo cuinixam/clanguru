@@ -1,11 +1,12 @@
 import bisect
+import ctypes
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TypeVar
+from typing import Any, ClassVar, Optional, TypeVar
 
-from clang.cindex import Cursor, CursorKind, Index, SourceRange, TranslationUnitLoadError
+from clang.cindex import Cursor, CursorKind, Index, SourceRange, TranslationUnitLoadError, conf
 from clang.cindex import Token as _Token
 from clang.cindex import TranslationUnit as _TranslationUnit
 from py_app_dev.core.exceptions import UserNotificationException
@@ -218,6 +219,12 @@ class Variable(Declaration):
                 return None
 
 
+class _SourceRangeList(ctypes.Structure):
+    """CXSourceRangeList, returned by clang_getAllSkippedRanges."""
+
+    _fields_: ClassVar[list[tuple[str, Any]]] = [("count", ctypes.c_uint), ("ranges", ctypes.POINTER(SourceRange))]
+
+
 class CLangParser:
     def __init__(self) -> None:
         self.index = Index.create()
@@ -225,7 +232,9 @@ class CLangParser:
     def load(self, file: Path, compilation_options_manager: CompilationOptionsManager | None = None) -> TranslationUnit:
         args = compilation_options_manager.get_includes_and_defines(file) if compilation_options_manager else []
         try:
-            translation_unit = TranslationUnit(raw_tu=self.index.parse(str(file), args=args), tokens=TokensCollection([]), nodes=[])
+            translation_unit = TranslationUnit(
+                raw_tu=self.index.parse(str(file), args=args, options=_TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD), tokens=TokensCollection([]), nodes=[]
+            )
         except TranslationUnitLoadError:
             raise UserNotificationException(f"Could not parse source file {file} with arguments {args}. Check CLangParser options.") from None
         translation_unit.tokens = self._extract_tokens(translation_unit.raw_tu.cursor)
@@ -259,6 +268,8 @@ class CLangParser:
         token_offsets = [token.cached_offset_start for token in translation_unit.tokens]
         nodes: list[Node] = []
         for child in translation_unit.raw_tu.cursor.get_children():
+            if child.kind.is_preprocessing():
+                continue
             current_node = Node(
                 raw_node=child,
                 previous_node=None,
@@ -350,7 +361,25 @@ class CLangParser:
             for node in tu.nodes
             if node.raw_node.location.file is not None and Path(node.raw_node.location.file.name).resolve() == source_file
         ]
-        return [token for token in tu.tokens if token.is_comment and not any(start <= token.cached_offset_start < end for start, end in spans)]
+        skipped = CLangParser._get_skipped_ranges(tu)
+        return [token for token in tu.tokens if token.is_comment and not any(start <= token.cached_offset_start < end for start, end in spans + skipped)]
+
+    @staticmethod
+    def _get_skipped_ranges(tu: TranslationUnit) -> list[tuple[int, int]]:
+        """Start and end offsets of the ranges of the source file that the preprocessor skips."""
+        conf.lib.clang_getAllSkippedRanges.argtypes = [_TranslationUnit]
+        conf.lib.clang_getAllSkippedRanges.restype = ctypes.POINTER(_SourceRangeList)
+        conf.lib.clang_disposeSourceRangeList.argtypes = [ctypes.POINTER(_SourceRangeList)]
+        range_list = conf.lib.clang_getAllSkippedRanges(tu.raw_tu)
+        source_file = tu.source_file.resolve()
+        try:
+            return [
+                (skipped.start.offset, skipped.end.offset)
+                for skipped in (range_list.contents.ranges[index] for index in range(range_list.contents.count))
+                if skipped.start.file is not None and Path(skipped.start.file.name).resolve() == source_file
+            ]
+        finally:
+            conf.lib.clang_disposeSourceRangeList(range_list)
 
     @staticmethod
     def get_node_source_code(node: Node) -> SourceCodeSnippet:
