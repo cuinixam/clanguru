@@ -65,6 +65,7 @@ Tagged blocks work in any comment at file level, not only above a function or cl
 - Free blocks appear under the file title, before `Functions`, in source order.
 - Free blocks support `@md`, `@rst`, `@trace` and Jinja like declaration blocks. The `gtest` variables are not set. Errors name the source file.
 - Comments inside function bodies, struct or class bodies and other code are ignored.
+- Comments in code that the preprocessor skips (`#if 0`, an `#ifdef` of a disabled feature) are ignored. A variant documents only what it compiles.
 
 Source file `demo.c`:
 
@@ -113,6 +114,8 @@ int debounce(void) { return 0; }
 ````
 
 Known limit: a comment directly above the first function belongs to that function, even when you mean it as a file header. Blank lines do not separate them. Code such as `#include` does, as in the example above.
+
+Known limit: a comment directly above an `#if` line is active code and stays a free block, even when the code under the `#if` is skipped. Put the block inside the `#if`.
 
 ### Trace Blocks
 
