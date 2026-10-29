@@ -448,6 +448,20 @@ class NmExecutor:
             raise UnboundLocalError("nm command failed")
         return obj_data
 
+    def defined_symbols(self, binary_file: Path) -> set[str]:
+        """Local ones included: the linker turns hidden-visibility and LTO-internalized globals local."""
+        executor = SubprocessExecutor(command=[self.nm, binary_file], capture_output=True, print_output=False)
+        completed_process = executor.execute(handle_errors=False)
+        if not completed_process or completed_process.returncode != 0:
+            raise UserNotificationException(f"'{self.nm}' cannot read '{binary_file}'. Is it an ELF file?")
+        matches = (re.match(r"^\s*(?:[0-9A-Fa-f]+\s+)?([A-Za-z])\s+(\S+)", line) for line in completed_process.stdout.splitlines())
+        return {NmExecutor.source_level_name(match.group(2)) for match in matches if match and match.group(1) not in "Uvw"}
+
+    @staticmethod
+    def source_level_name(symbol_name: str) -> str:
+        """On macOS (Mach-O) the compiler prefixes C symbols with an underscore."""
+        return symbol_name[1:] if sys.platform == "darwin" and symbol_name.startswith("_") else symbol_name
+
     @staticmethod
     def get_symbol(nm_symbol_output: str) -> Symbol | None:
         # Regex to capture optional address, mandatory uppercase symbol type, and symbol name
@@ -458,12 +472,7 @@ class NmExecutor:
 
         if match:
             symbol_type_letter = match.group(1)
-            symbol_name = match.group(2)
-
-            # On macOS (Mach-O), the compiler prefixes C symbols with an underscore; strip it
-            # so that symbol names match the source-level identifiers.
-            if sys.platform == "darwin" and symbol_name.startswith("_"):
-                symbol_name = symbol_name[1:]
+            symbol_name = NmExecutor.source_level_name(match.group(2))
 
             # Determine linkage based on the symbol type letter
             linkage = SymbolLinkage.EXTERN if symbol_type_letter == "U" else SymbolLinkage.LOCAL
@@ -510,6 +519,11 @@ def filter_object_data_symbols(object_data: list[ObjectDependencies], exclude_pa
         # Recreate ObjectData to avoid stale cached_property values
         filtered.append(ObjectDependencies(path=obj.path, symbols=kept_symbols))
     return filtered
+
+
+def filter_linked_symbols(object_data: list[ObjectDependencies], linked_symbols: set[str]) -> list[ObjectDependencies]:
+    """Match by name only: a reference from code the linker removed stays while the linker kept its target for another caller."""
+    return [ObjectDependencies(path=obj.path, symbols=[symbol for symbol in obj.symbols if symbol.name in linked_symbols]) for obj in object_data]
 
 
 def filter_external_symbols_only(object_data: list[ObjectDependencies]) -> list[ObjectDependencies]:

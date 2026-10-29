@@ -307,6 +307,22 @@ clanguru analyze --compilation-database compile_commands.json \
   --exclude-symbol-pattern "test_*"
 ```
 
+### Linked Symbols Only
+
+Keep only the symbols that made it into the linked binary. Dependencies on code the linker
+removed (for example with `--gc-sections`) drop out of the report:
+
+```shell
+clanguru analyze --compilation-database compile_commands.json \
+  --output-file dependencies.html \
+  --elf-file build/app.elf
+```
+
+clanguru reads the ELF file with the same `nm` as the object files. Symbols match by name, so a
+reference from removed code stays when the linker kept its target for another caller, and a removed
+global stays when a kept static symbol elsewhere has the same name. With link-time
+optimization, calls the linker inlined across objects leave no symbol behind and drop out too.
+
 ## Code Parsing
 
 Parse C/C++ source code and examine the Abstract Syntax Tree (AST) for debugging and analysis.
