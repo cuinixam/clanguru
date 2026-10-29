@@ -14,6 +14,7 @@ from clanguru.cparser import CLangParser, Declaration, Token, TranslationUnit
 GTEST_MACROS = ("TEST", "TEST_P", "TEST_F", "TYPED_TEST", "TYPED_TEST_P")
 _GTEST_DECL_RE = re.compile(rf"^\s*(?:{'|'.join(GTEST_MACROS)})\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)")
 _TEMPLATE_ENV = Environment(undefined=StrictUndefined, autoescape=select_autoescape(enabled_extensions=()))
+_GTEST_HINT = f". 'gtest' is set only for a block directly above a {'/'.join(GTEST_MACROS)} macro, with no code or preprocessor line in between"
 
 
 @dataclass
@@ -392,8 +393,8 @@ def _render_doc_template(content: str, declaration_name: str, gtest: GTestInfo |
     Render a doc block as a Jinja2 template.
 
     Undefined variables raise `UserNotificationException` with the declaration name so
-    authors can locate the faulty placeholder. Content without `{{`/`{%` is returned
-    verbatim (cheap short-circuit).
+    authors can locate the faulty placeholder. An undefined `gtest` adds a hint where the
+    block must stand. Content without `{{`/`{%` is returned verbatim (cheap short-circuit).
     """
     if "{{" not in content and "{%" not in content:
         return content
@@ -401,7 +402,8 @@ def _render_doc_template(content: str, declaration_name: str, gtest: GTestInfo |
     try:
         return _TEMPLATE_ENV.from_string(content).render(context)
     except UndefinedError as error:
-        raise UserNotificationException(f"Undefined template variable in doc block of '{declaration_name}': {error.message}") from error
+        hint = _GTEST_HINT if gtest is None and "'gtest'" in str(error.message) else ""
+        raise UserNotificationException(f"Undefined template variable in doc block of '{declaration_name}': {error.message}{hint}") from error
     except TemplateError as error:
         raise UserNotificationException(f"Template error in doc block of '{declaration_name}': {error}") from error
 
@@ -409,9 +411,10 @@ def _render_doc_template(content: str, declaration_name: str, gtest: GTestInfo |
 def _collect_comment_contents(name: str, comment_tokens: list[Token], tags: list[str], gtest: GTestInfo | None) -> list[SectionContent]:
     contents: list[SectionContent] = []
     for token in comment_tokens:
+        location = f"{name}:{token.cached_line}"
         raw = CLangParser.get_comment_content(token)
         for content in _extract_doc_contents(raw, tags):
-            contents.extend(_split_traces(_render_doc_template(content, name, gtest), name))
+            contents.extend(_split_traces(_render_doc_template(content, location, gtest), location))
     return contents
 
 
