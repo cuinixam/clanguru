@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.22.0 (2026-10-29)
+
+### Bug fixes
+
+- Name the line and hint the fix for a gtest block without a test ([`8228f3a`](https://github.com/cuinixam/clanguru/commit/8228f3a05c40b8f7f93ecbf74bd840c89987d863))
+- Ignore @docs blocks in preprocessor-skipped code ([`d9ad9e8`](https://github.com/cuinixam/clanguru/commit/d9ad9e8c01dce4e06699d00931acb1129f12dab6))
+
+### Features
+
+- Emit @docs blocks from any file-level comment ([`6c68fce`](https://github.com/cuinixam/clanguru/commit/6c68fcecbebabeb71cca1c1cdea503a76f2016b7))
+- Add format-neutral @trace blocks for sphinx-needs items ([`48b0c45`](https://github.com/cuinixam/clanguru/commit/48b0c45d0147beabe0494e98821d4bb2a6bb2612))
+
+### Documentation
+
+- Refine clg-007 into file-level doc blocks ([`379468a`](https://github.com/cuinixam/clanguru/commit/379468a4dd006756c2cfc2bc550ae3250f75ae19))
+- Add decisions and tasks to clg-006 ([`ca9c579`](https://github.com/cuinixam/clanguru/commit/ca9c579c7f2bcbad5fc90824abb4b4903803ba1c))
+- Refine clg-006 into a format-neutral trace block ([`674becf`](https://github.com/cuinixam/clanguru/commit/674becf41f101a3af679e4373527e929cd82c485))
+- Close clg-003 as won't do ([`b8f7862`](https://github.com/cuinixam/clanguru/commit/b8f7862a578514fb5bcb998176f3920ba8d92dcc))
+- Start clg-002 ([`f04da8c`](https://github.com/cuinixam/clanguru/commit/f04da8ccb78a51b11731b9272a6c0c5e87613a9e))
+- Add backlog for open work ([`8c3d895`](https://github.com/cuinixam/clanguru/commit/8c3d895588b791f507b0be852d6364828430e994))
+
 ## v0.21.2 (2026-10-12)
 
 ### Bug fixes
