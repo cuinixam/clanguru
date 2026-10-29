@@ -842,3 +842,18 @@ def test_free_docs_blocks_in_skipped_code_are_ignored(tmp_path: Path, condition:
     source.write_text(f"#if {condition}\n/** @docs Variant text @enddocs */\nint value;\n#endif\n", newline="\n")
     doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md)
     assert doc.content == expected
+
+
+@pytest.mark.parametrize(
+    ("code", "location"),
+    [
+        ("#define FEATURE\n/** @docs {{ gtest.test }} @enddocs */\n#ifdef FEATURE\nTEST(suite, name);\n#endif\n", "gt.cc:3"),
+        ("/** @docs {{ gtest.test }} @enddocs */\nint helper;\nTEST(suite, name);\n", "gt.cc:2"),
+        ("/** @docs {{ gtest.test }} @enddocs */\nvoid func(void) {}\n", "func:2"),
+    ],
+)
+def test_gtest_block_without_test_raises_with_line_and_hint(tmp_path: Path, code: str, location: str) -> None:
+    source = tmp_path / "gt.cc"
+    source.write_text(f"#define TEST(s, n) class s##_##n {{}}\n{code}", newline="\n")
+    with pytest.raises(UserNotificationException, match=f"'{location}'.*directly above"):
+        generate_doc_structure(CLangParser().load(source), DocsFormat.md)

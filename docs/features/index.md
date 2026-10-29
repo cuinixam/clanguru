@@ -63,7 +63,7 @@ Tagged blocks work in any comment at file level, not only above a function or cl
 - A block directly above a function definition or class appears once, in the section of that declaration.
 - Any other file-level block is a free block. This includes the file header and the comments above prototypes, variables, structs and typedefs.
 - Free blocks appear under the file title, before `Functions`, in source order.
-- Free blocks support `@md`, `@rst`, `@trace` and Jinja like declaration blocks. The `gtest` variables are not set. Errors name the source file.
+- Free blocks support `@md`, `@rst`, `@trace` and Jinja like declaration blocks. The `gtest` variables are not set. Errors name the source file and the line of the comment.
 - Comments inside function bodies, struct or class bodies and other code are ignored.
 - Comments in code that the preprocessor skips (`#if 0`, an `#ifdef` of a disabled feature) are ignored. A variant documents only what it compiles.
 
@@ -198,7 +198,9 @@ Parameterised tests keep the `INSTANTIATE_TEST_SUITE_P` prefix as literal text â
 TEST_P(BlinkPeriodTest, CalculatesCorrectBlinkPeriod) { /* ... */ }
 ```
 
-Undefined variables (for example, `{{ gtest.test }}` on a non-test function) raise an error that names the offending declaration, so mistakes surface at doc-generation time rather than downstream in the Sphinx build.
+Undefined variables (for example, `{{ gtest.test }}` on a non-test function) raise an error that names the offending declaration and the line of the comment, so mistakes surface at doc-generation time rather than downstream in the Sphinx build.
+
+`gtest` is set only for a block directly above a GoogleTest macro. Nothing may stand between the comment and the macro: no code and no preprocessor line. A comment above an `#ifdef` line does not belong to the test inside it. Put the comment inside the `#ifdef`, directly above the test.
 
 ## Mock Generation
 
