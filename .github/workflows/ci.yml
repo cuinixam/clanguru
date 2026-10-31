@@ -21,7 +21,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.13
+          python-version: "3.13"
+          check-latest: true
       - name: Install pypeline runner
         run: pip install pypeline-runner>=1.23
         shell: bash
@@ -46,19 +47,24 @@ jobs:
       matrix:
         python-version:
           - "3.10"
-          - "3.13"
+          - "3.14"
         os:
           - ubuntu-latest
           - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
+      # uv's Python builds bundle a pip with the emSign fix also for 3.11; python.org's do not.
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Install Python
+        run: |
+          uv python install ${{ matrix.python-version }}
+          uv python dir --bin >> "$GITHUB_PATH"
+        shell: bash
       - name: Install pypeline runner
-        run: pip install pypeline-runner>=1.23
+        run: |
+          uv tool install "pypeline-runner>=1.23"
+          uv tool dir --bin >> "$GITHUB_PATH"
         shell: bash
       - name: Run pypeline
         run: pypeline run --step CreateVEnv --step PyTest --single --input python_version=${{ matrix.python-version }}
