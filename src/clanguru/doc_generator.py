@@ -1,3 +1,4 @@
+import os
 import re
 import textwrap
 from abc import ABC, abstractmethod
@@ -418,9 +419,22 @@ def _collect_comment_contents(name: str, comment_tokens: list[Token], tags: list
     return contents
 
 
-def _build_declaration_section(name: str, description_tokens: list[Token], body_code: str, body_start_line: int, tags: list[str]) -> Section:
+def _relative_to_source(file_name: str, source_dir: Path) -> str:
+    """Path of a file relative to the source folder, or the absolute path when there is none (another drive on Windows)."""
+    try:
+        return Path(os.path.relpath(file_name, source_dir)).as_posix()
+    except ValueError:
+        return Path(file_name).as_posix()
+
+
+def _build_declaration_section(
+    name: str, declaration_descriptions: list[list[Token]], description_tokens: list[Token], body_code: str, body_start_line: int, tags: list[str], source_dir: Path
+) -> Section:
     section = Section(name)
-    section.content.extend(_collect_comment_contents(name, description_tokens, tags, _detect_gtest(body_code)))
+    gtest = _detect_gtest(body_code)
+    for tokens in declaration_descriptions:
+        section.content.extend(_collect_comment_contents(_relative_to_source(tokens[0].cached_file_name, source_dir), tokens, tags, gtest))
+    section.content.extend(_collect_comment_contents(name, description_tokens, tags, gtest))
     section.add_content(CodeContent(code=body_code, start_line=body_start_line))
     return section
 
@@ -440,6 +454,7 @@ def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsF
     """
     tags = [docs_format.format_tag, "docs"]
 
+    source_dir = translation_unit.source_file.parent
     doc = DocStructure(translation_unit.source_file.name)
     functions = [f for f in CLangParser.get_functions(translation_unit) if f.is_definition and _is_declared_in(f, translation_unit)]
     classes = [c for c in CLangParser.get_classes(translation_unit) if _is_declared_in(c, translation_unit)]
@@ -449,14 +464,25 @@ def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsF
     if functions:
         functions_section = Section("Functions")
         doc.add_section(functions_section)
+        declaration_descriptions = CLangParser.get_declaration_descriptions(translation_unit, functions)
         for func in functions:
-            functions_section.add_subsection(_build_declaration_section(func.name, func.description_tokens, func.body.content, func.body.start_line, tags))
+            functions_section.add_subsection(
+                _build_declaration_section(
+                    func.name,
+                    declaration_descriptions.get(func.origin.raw_node.canonical, []),
+                    func.description_tokens,
+                    func.body.content,
+                    func.body.start_line,
+                    tags,
+                    source_dir,
+                )
+            )
 
     if classes:
         classes_section = Section("Classes")
         doc.add_section(classes_section)
         for cls in classes:
-            classes_section.add_subsection(_build_declaration_section(cls.name, cls.description_tokens, cls.body.content, cls.body.start_line, tags))
+            classes_section.add_subsection(_build_declaration_section(cls.name, [], cls.description_tokens, cls.body.content, cls.body.start_line, tags, source_dir))
 
     return doc
 

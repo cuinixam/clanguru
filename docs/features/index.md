@@ -61,7 +61,8 @@ int sum(int a, int b) { return a + b; }
 Tagged blocks work in any comment at file level, not only above a function or class:
 
 - A block directly above a function definition or class appears once, in the section of that declaration.
-- Any other file-level block is a free block. This includes the file header and the comments above prototypes, variables, structs and typedefs.
+- A block directly above the declaration of a function in a header also appears in the section of that function. See "Blocks in the header" below.
+- Any other file-level block is a free block. This includes the file header and the comments above prototypes in the source file, variables, structs and typedefs.
 - Free blocks appear under the file title, before `Functions`, in source order.
 - Free blocks support `@md`, `@rst`, `@trace` and Jinja like declaration blocks. The `gtest` variables are not set. Errors name the source file and the line of the comment.
 - Comments inside function bodies, struct or class bodies and other code are ignored.
@@ -116,6 +117,30 @@ int debounce(void) { return 0; }
 Known limit: a comment directly above the first function belongs to that function, even when you mean it as a file header. Blank lines do not separate them. Code such as `#include` does, as in the example above.
 
 Known limit: a comment directly above an `#if` line is active code and stays a free block, even when the code under the `#if` is skipped. Put the block inside the `#if`.
+
+#### Blocks in the header
+
+You can keep the description and the traceability of a function next to its prototype in the header. Clanguru reads the blocks directly above every declaration of the function in an included header and puts them in the section of the function:
+
+- The header blocks come first, then the blocks above the definition.
+- Several headers that declare the function are read in include order.
+- Errors name the header path relative to the source file, such as `../include/door.h:2`, and the line of the comment.
+
+```c
+/* door.h */
+/** @docs Debounces the switch. @enddocs */
+int debounce(void);
+```
+
+```c
+/* door.c */
+#include "door.h"
+int debounce(void) { return 0; }
+```
+
+The section of `debounce` shows "Debounces the switch." above the code.
+
+Known limit: in a C++ source, prototypes inside an `extern "C"` block are not read yet (CLG-010).
 
 ### Trace Blocks
 

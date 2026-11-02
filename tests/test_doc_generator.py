@@ -1,4 +1,6 @@
 import json
+import os
+import re
 from pathlib import Path
 from textwrap import dedent
 
@@ -20,6 +22,7 @@ from clanguru.doc_generator import (
     TextContent,
     TraceContent,
     _detect_gtest,
+    _relative_to_source,
     _render_doc_template,
     _split_traces,
     generate_doc_structure,
@@ -834,6 +837,67 @@ def test_malformed_free_trace_raises_with_file_name(tmp_path: Path) -> None:
     source.write_text("/** @trace Title\n * id: X\n */\nint value;\n", newline="\n")
     with pytest.raises(UserNotificationException, match="bad_free.c"):
         generate_doc_structure(CLangParser().load(source), DocsFormat.md)
+
+
+@pytest.mark.parametrize(
+    ("header_comment", "source_comment", "expected"),
+    [
+        ("/** @docs Header doc @enddocs */\n", "", [TextContent("Header doc")]),
+        ("/** @docs Header doc @enddocs */\n", "/** @docs Source doc @enddocs */\n", [TextContent("Header doc"), TextContent("Source doc")]),
+        ("", "/** @docs Source doc @enddocs */\n", [TextContent("Source doc")]),
+        (
+            "/**\n * @trace Foo implementation\n * type: impl\n * id: SWIMPL_FOO-001\n * implements: SWDD_FOO-100\n */\n",
+            "",
+            [TraceContent("impl", "Foo implementation", {"id": "SWIMPL_FOO-001", "implements": "SWDD_FOO-100"})],
+        ),
+    ],
+)
+def test_function_section_includes_the_blocks_above_its_header_declaration(
+    tmp_path: Path, header_comment: str, source_comment: str, expected: list[TextContent | TraceContent]
+) -> None:
+    (tmp_path / "foo.h").write_text(f"#pragma once\n{header_comment}int foo(int value);\n", newline="\n")
+    source = tmp_path / "foo.c"
+    source.write_text(f'#include "foo.h"\n{source_comment}int foo(int value) {{ return value; }}\n', newline="\n")
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md)
+    assert doc.content == []
+    assert doc.sections[0].subsections[0].content[:-1] == expected
+
+
+def test_function_declared_in_several_headers_gets_the_blocks_of_all_in_include_order(tmp_path: Path) -> None:
+    (tmp_path / "first.h").write_text("#pragma once\n/** @docs First header @enddocs */\nint foo(void);\n", newline="\n")
+    (tmp_path / "second.h").write_text("#pragma once\n/** @docs Second header @enddocs */\nint foo(void);\n", newline="\n")
+    source = tmp_path / "foo.c"
+    source.write_text('#include "first.h"\n#include "second.h"\nint foo(void) { return 0; }\n', newline="\n")
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md)
+    assert doc.sections[0].subsections[0].content[:-1] == [TextContent("First header"), TextContent("Second header")]
+
+
+def test_blocks_above_a_prototype_in_the_source_file_stay_free(tmp_path: Path) -> None:
+    source = tmp_path / "foo.c"
+    source.write_text("/** @docs Prototype doc @enddocs */\nint foo(void);\nint foo(void) { return 0; }\n", newline="\n")
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md)
+    assert doc.content == [TextContent("Prototype doc")]
+    assert doc.sections[0].subsections[0].content[:-1] == []
+
+
+@pytest.mark.parametrize(("source_dir", "include_dir", "location"), [("", "inc", "inc/bad.h:2"), ("src", "include", "../include/bad.h:2")])
+def test_malformed_header_trace_raises_with_header_path_relative_to_source_and_line(tmp_path: Path, source_dir: str, include_dir: str, location: str) -> None:
+    (tmp_path / include_dir).mkdir()
+    (tmp_path / include_dir / "bad.h").write_text("int pad;\n/** @trace Title\n * id: X\n */\nint foo(void);\n", newline="\n")
+    (tmp_path / source_dir).mkdir(exist_ok=True)
+    source = tmp_path / source_dir / "foo.c"
+    source.write_text('#include "bad.h"\nint foo(void) { return 0; }\n', newline="\n")
+    compile_db = make_compile_commands(tmp_path, source, [tmp_path / include_dir])
+    with pytest.raises(UserNotificationException, match=f"'{re.escape(location)}'"):
+        generate_doc_structure(CLangParser().load(source, CompilationOptionsManager(compile_db)), DocsFormat.md)
+
+
+def test_relative_to_source_falls_back_to_the_absolute_path_on_another_drive(monkeypatch: pytest.MonkeyPatch) -> None:
+    def relpath_on_another_drive(path: str, start: str) -> str:
+        raise ValueError(f"path is on mount 'D:', start on mount 'C:': {path}, {start}")
+
+    monkeypatch.setattr(os.path, "relpath", relpath_on_another_drive)
+    assert _relative_to_source("D:/sdk/inc/foo.h", Path("C:/project/src")) == "D:/sdk/inc/foo.h"
 
 
 @pytest.mark.parametrize(("condition", "expected"), [("0", []), ("1", [TextContent("Variant text")])])
