@@ -2,6 +2,7 @@ import bisect
 import ctypes
 import re
 from collections import OrderedDict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Optional, TypeVar
@@ -237,13 +238,14 @@ class CLangParser:
             )
         except TranslationUnitLoadError:
             raise UserNotificationException(f"Could not parse source file {file} with arguments {args}. Check CLangParser options.") from None
-        translation_unit.tokens = self._extract_tokens(translation_unit.raw_tu.cursor)
+        translation_unit.tokens = self._extract_tokens(translation_unit.raw_tu.cursor.get_tokens())
         translation_unit.nodes = self._extract_nodes(translation_unit)
         return translation_unit
 
-    def _extract_tokens(self, cursor: Cursor) -> TokensCollection:
+    @staticmethod
+    def _extract_tokens(raw_tokens: Iterable[_Token]) -> TokensCollection:
         tokens: list[Token] = []
-        for token in cursor.get_tokens():
+        for token in raw_tokens:
             extent = token.extent
             location = token.location
             file_obj = location.file
@@ -351,6 +353,45 @@ class CLangParser:
 
         comments.reverse()
         return comments
+
+    @staticmethod
+    def get_declaration_descriptions(tu: TranslationUnit, functions: list[Function]) -> dict[Cursor, list[list[Token]]]:
+        """
+        Collect the comments directly above the declarations of the functions in other files, such as their prototypes in a header.
+
+        Maps the canonical cursor of a function to one list of comment tokens per declaration that has comments,
+        in the order of the declarations. Searches the top-level nodes once and tokenizes each file once.
+        """
+        canonicals = {function.origin.raw_node.canonical for function in functions}
+        source_file = tu.source_file.resolve()
+        tokens_by_file: dict[str, dict[int, Token]] = {}
+        descriptions: dict[Cursor, list[list[Token]]] = {}
+        for node in tu.nodes:
+            cursor = node.raw_node
+            if cursor.kind != CursorKind.FUNCTION_DECL or cursor.is_definition() or cursor.canonical not in canonicals:
+                continue
+            declaration_file = cursor.location.file
+            if declaration_file is None or Path(declaration_file.name).resolve() == source_file:
+                continue
+            if declaration_file.name not in tokens_by_file:
+                tokens_by_file[declaration_file.name] = CLangParser._tokens_by_offset(tu, declaration_file.name)
+            description = CLangParser._description_above(tu, cursor, tokens_by_file[declaration_file.name])
+            if description:
+                descriptions.setdefault(cursor.canonical, []).append(description)
+        return descriptions
+
+    @staticmethod
+    def _tokens_by_offset(tu: TranslationUnit, file_name: str) -> dict[int, Token]:
+        """Tokenize a file of the translation unit, such as an included header, and index the tokens by their start offset."""
+        extent = tu.raw_tu.get_extent(file_name, (0, Path(file_name).stat().st_size))
+        return {token.cached_offset_start: token for token in CLangParser._extract_tokens(tu.raw_tu.get_tokens(extent=extent))}
+
+    @staticmethod
+    def _description_above(tu: TranslationUnit, cursor: Cursor, tokens_by_offset: dict[int, Token]) -> list[Token]:
+        first_token = tokens_by_offset.get(cursor.extent.start.offset)
+        if first_token is None:
+            return []
+        return CLangParser.search_description(Node(raw_node=cursor, previous_node=None, next_node=None, tokens=TokensCollection([first_token]), parent=tu))
 
     @staticmethod
     def get_file_scope_comments(tu: TranslationUnit) -> list[Token]:

@@ -19,6 +19,7 @@
 - [CLG-001 — Backlog refinement](clg-001.md)
 
 ### Done
+- [CLG-009 — Doc blocks from the function declaration in the header](clg-009.md)
 - [CLG-007 — `@docs` blocks in any comment of the file](clg-007.md)
 - [CLG-006 — Format-neutral trace blocks for sphinx-needs items](clg-006.md)
 - [CLG-003 — Generate component interface docs](clg-003.md)
