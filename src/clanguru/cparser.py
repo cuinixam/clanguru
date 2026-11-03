@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Optional, TypeVar
 
-from clang.cindex import Cursor, CursorKind, Index, SourceRange, TranslationUnitLoadError, conf
+from clang.cindex import Cursor, CursorKind, File, Index, SourceRange, TranslationUnitLoadError, conf
 from clang.cindex import Token as _Token
 from clang.cindex import TranslationUnit as _TranslationUnit
 from py_app_dev.core.exceptions import UserNotificationException
@@ -221,7 +221,7 @@ class Variable(Declaration):
 
 
 class _SourceRangeList(ctypes.Structure):
-    """CXSourceRangeList, returned by clang_getAllSkippedRanges."""
+    """CXSourceRangeList, returned by clang_getSkippedRanges."""
 
     _fields_: ClassVar[list[tuple[str, Any]]] = [("count", ctypes.c_uint), ("ranges", ctypes.POINTER(SourceRange))]
 
@@ -396,11 +396,11 @@ class CLangParser:
     @staticmethod
     def get_file_scope_comments(tu: TranslationUnit) -> list[Token]:
         """Comment tokens of the source file that are not inside a top-level node of that file, in source order."""
-        source_file = tu.source_file.resolve()
+        source_file_name = tu.raw_tu.get_file(str(tu.source_file)).name
         spans = [
             (node.raw_node.extent.start.offset, node.raw_node.extent.end.offset)
             for node in tu.nodes
-            if node.raw_node.location.file is not None and Path(node.raw_node.location.file.name).resolve() == source_file
+            if node.raw_node.location.file is not None and node.raw_node.location.file.name == source_file_name
         ]
         skipped = CLangParser._get_skipped_ranges(tu)
         return [token for token in tu.tokens if token.is_comment and not any(start <= token.cached_offset_start < end for start, end in spans + skipped)]
@@ -408,17 +408,12 @@ class CLangParser:
     @staticmethod
     def _get_skipped_ranges(tu: TranslationUnit) -> list[tuple[int, int]]:
         """Start and end offsets of the ranges of the source file that the preprocessor skips."""
-        conf.lib.clang_getAllSkippedRanges.argtypes = [_TranslationUnit]
-        conf.lib.clang_getAllSkippedRanges.restype = ctypes.POINTER(_SourceRangeList)
+        conf.lib.clang_getSkippedRanges.argtypes = [_TranslationUnit, File]
+        conf.lib.clang_getSkippedRanges.restype = ctypes.POINTER(_SourceRangeList)
         conf.lib.clang_disposeSourceRangeList.argtypes = [ctypes.POINTER(_SourceRangeList)]
-        range_list = conf.lib.clang_getAllSkippedRanges(tu.raw_tu)
-        source_file = tu.source_file.resolve()
+        range_list = conf.lib.clang_getSkippedRanges(tu.raw_tu, tu.raw_tu.get_file(str(tu.source_file)))
         try:
-            return [
-                (skipped.start.offset, skipped.end.offset)
-                for skipped in (range_list.contents.ranges[index] for index in range(range_list.contents.count))
-                if skipped.start.file is not None and Path(skipped.start.file.name).resolve() == source_file
-            ]
+            return [(skipped.start.offset, skipped.end.offset) for skipped in (range_list.contents.ranges[index] for index in range(range_list.contents.count))]
         finally:
             conf.lib.clang_disposeSourceRangeList(range_list)
 
