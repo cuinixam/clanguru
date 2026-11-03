@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.23.0 (2026-11-03)
+
+### Features
+
+- Read doc blocks above the function declaration in the header ([`6b02d71`](https://github.com/cuinixam/clanguru/commit/6b02d71c7d44348e497022633092b0f4de84748d))
+
+### Documentation
+
+- Add clg-010 ([`94f9fc0`](https://github.com/cuinixam/clanguru/commit/94f9fc0a69ed054e1cfbd0f8862807f85ddbb8ba))
+- Add clg-008 ([`bbffe2c`](https://github.com/cuinixam/clanguru/commit/bbffe2cf38cff22704c2f52a88d07872bfd7416a))
+
+### Build system
+
+- Upgrade uv-pre-commit to 0.13.6 ([`b96da81`](https://github.com/cuinixam/clanguru/commit/b96da8105d6287e2e45a838658b678148646a319))
+
 ## v0.22.0 (2026-10-29)
 
 ### Bug fixes
