@@ -908,6 +908,15 @@ def test_free_docs_blocks_in_skipped_code_are_ignored(tmp_path: Path, condition:
     assert doc.content == expected
 
 
+def test_skipped_ranges_of_headers_are_not_read(tmp_path: Path) -> None:
+    (tmp_path / "skips.h").write_text("#if 0\n#endif\n" * 500, newline="\n")
+    source = tmp_path / "skipped.c"
+    source.write_text('#include "skips.h"\n#if 0\n/** @docs Variant text @enddocs */\n#endif\n', newline="\n")
+    translation_unit = CLangParser().load(source)
+    assert len(CLangParser._get_skipped_ranges(translation_unit)) == 1
+    assert generate_doc_structure(translation_unit, DocsFormat.md).content == []
+
+
 @pytest.mark.parametrize(
     ("code", "location"),
     [

@@ -9,16 +9,20 @@
 ## Table of Contents
 
 ### Open
+
 - [CLG-010 — Doc blocks of prototypes inside `extern "C"`](clg-010.md)
 - [CLG-008 — Clearer doc block error messages](clg-008.md)
 - [CLG-005 — Readability options for the analyze graph](clg-005.md)
 - [CLG-004 — Parse once, reuse the translation unit](clg-004.md)
 
 ### In Progress
+
 - [CLG-002 — Filter object dependencies by the linked map or ELF file](clg-002.md)
 - [CLG-001 — Backlog refinement](clg-001.md)
 
 ### Done
+
+- [CLG-011 — Fast skipped-code check for sources with large headers](clg-011.md)
 - [CLG-009 — Doc blocks from the function declaration in the header](clg-009.md)
 - [CLG-007 — `@docs` blocks in any comment of the file](clg-007.md)
 - [CLG-006 — Format-neutral trace blocks for sphinx-needs items](clg-006.md)
