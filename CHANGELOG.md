@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.23.1 (2026-11-03)
+
+### Bug fixes
+
+- Read only the skipped ranges of the source file (clg-011) ([`818e800`](https://github.com/cuinixam/clanguru/commit/818e800c5468ccddb89c296a233f04a77223b5e9))
+
 ## v0.23.0 (2026-11-03)
 
 ### Features
