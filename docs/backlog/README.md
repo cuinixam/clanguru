@@ -10,6 +10,9 @@
 
 ### Open
 
+- [CLG-014 — Link from a trace to its source line](clg-014.md)
+- [CLG-013 — Trace blocks inside function bodies](clg-013.md)
+- [CLG-012 — Code snippet for documented types and variables](clg-012.md)
 - [CLG-010 — Doc blocks of prototypes inside `extern "C"`](clg-010.md)
 - [CLG-008 — Clearer doc block error messages](clg-008.md)
 - [CLG-005 — Readability options for the analyze graph](clg-005.md)
