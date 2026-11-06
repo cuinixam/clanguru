@@ -314,6 +314,7 @@ def test_create_filter_tree(object_report_data_list: tuple[Path, list[ObjectRepo
     [
         ("riscv64-zephyr-elf-gcc", True, "riscv64-zephyr-elf-nm"),
         ("arm-none-eabi-g++", True, "arm-none-eabi-nm"),
+        ("riscv64-zephyr-elf-gcc.exe", True, "riscv64-zephyr-elf-nm.exe"),
         ("riscv64-zephyr-elf-gcc", False, "nm"),
         ("clang", False, "nm"),
         (None, False, "nm"),
