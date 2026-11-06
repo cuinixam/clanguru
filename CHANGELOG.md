@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.23.2 (2026-11-06)
+
+### Bug fixes
+
+- Find the cross nm next to a .exe compiler ([`1ce6f78`](https://github.com/cuinixam/clanguru/commit/1ce6f785f062d0125b4381219d083f1ad2ab18b9))
+
+### Documentation
+
+- Add clg-012, clg-013 and clg-014 ([`3213f32`](https://github.com/cuinixam/clanguru/commit/3213f32543a7f50d73948b7df712f4554c5a49bf))
+
 ## v0.23.1 (2026-11-03)
 
 ### Bug fixes
