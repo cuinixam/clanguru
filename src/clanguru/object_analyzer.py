@@ -419,9 +419,9 @@ class NmExecutor:
         and no symbols at all.
         """
         if compiler:
-            match = re.fullmatch(r"(.+-)(gcc|g\+\+|cc|c\+\+)", compiler.name)
+            match = re.fullmatch(r"(.+-)(gcc|g\+\+|cc|c\+\+)", compiler.stem)
             if match:
-                candidate = compiler.with_name(f"{match.group(1)}nm")
+                candidate = compiler.with_name(f"{match.group(1)}nm{compiler.suffix}")
                 if candidate.is_file():
                     return cls(candidate.as_posix())
         return cls()

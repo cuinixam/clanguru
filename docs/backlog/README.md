@@ -25,6 +25,7 @@
 
 ### Done
 
+- [CLG-015 — analyze uses host nm on Windows cross toolchains](clg-015.md)
 - [CLG-011 — Fast skipped-code check for sources with large headers](clg-011.md)
 - [CLG-009 — Doc blocks from the function declaration in the header](clg-009.md)
 - [CLG-007 — `@docs` blocks in any comment of the file](clg-007.md)
