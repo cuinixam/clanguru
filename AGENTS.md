@@ -105,9 +105,9 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
 
 ## Backlog
 
-Open work lives in `docs/backlog/`, one file per item with prefix `CLG`. The item file is the only source of truth for its status; `README.md` holds the generated table of contents. Use the `refinement` and `backlog-ops` skills of the `xxthunder-dev-skills` plugin, which run `backlog.py` for IDs, status and the table of contents.
+Open work lives in `docs/backlog/`, one file per item with prefix `CLG`. An item has a YAML header (`status`, `priority`, `component`, and optionally `autonomy`, `blocked_by`, `related`) and the chapters Summary, Description and Acceptance criteria. The `status` key is the only source of truth for an item's status; `README.md` holds the generated table of contents. Use the `refinement` and `backlog-ops` skills, which run `jarvis backlog` for IDs, status, the table of contents and the format check.
 
-- Every item open to contributors has a GitHub issue, recorded as `**Issue**: #N`. The issue holds the discussion; its body only links to the item and never copies it.
+- Every item open to contributors has a GitHub issue, recorded as `#N` in an `## Issue` chapter of the item. The issue holds the discussion; its body only links to the item and never copies it.
 - The pull request that closes an item says `Closes #N`.
 - A commit that touches only files under `docs/backlog/` may be pushed directly to `main`. Any commit that touches other files goes through a pull request. CI skips backlog-only changes.
 
