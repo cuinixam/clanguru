@@ -213,7 +213,9 @@ clanguru analyze --compilation-database compile_commands.json \
 clanguru reads the ELF file with the same `nm` as the object files. Symbols match by name, so a
 reference from removed code stays when the linker kept its target for another caller, and a removed
 global stays when a kept static symbol elsewhere has the same name. With link-time
-optimization, calls the linker inlined across objects leave no symbol behind and drop out too.
+optimization, renamed copies such as `foo.constprop.0` count as `foo`, but calls the linker inlined
+across objects leave no symbol behind and drop out. GCC LTO objects need `-ffat-lto-objects`,
+otherwise the `nm` that clanguru calls finds no symbols in them.
 
 ## Code Parsing
 

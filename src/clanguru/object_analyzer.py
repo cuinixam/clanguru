@@ -449,13 +449,20 @@ class NmExecutor:
         return obj_data
 
     def defined_symbols(self, binary_file: Path) -> set[str]:
-        """Local ones included: the linker turns hidden-visibility and LTO-internalized globals local."""
+        """
+        Local ones included: the linker turns hidden-visibility and LTO-internalized globals local.
+
+        LTO clones such as ``foo.constprop.0`` also count as ``foo``. The full name stays too:
+        Green Hills objects themselves define dotted names such as ``foo..C.3A.5Csrc.5Cfoo.2Ec.``.
+        """
         executor = SubprocessExecutor(command=[self.nm, binary_file], capture_output=True, print_output=False)
         completed_process = executor.execute(handle_errors=False)
         if not completed_process or completed_process.returncode != 0:
-            raise UserNotificationException(f"'{self.nm}' cannot read '{binary_file}'. Is it an ELF file?")
+            nm_output = completed_process.stdout.strip() if completed_process else ""
+            raise UserNotificationException(f"'{self.nm}' cannot read '{binary_file}'. Is it an ELF file? nm said: {nm_output}")
         matches = (re.match(r"^\s*(?:[0-9A-Fa-f]+\s+)?([A-Za-z])\s+(\S+)", line) for line in completed_process.stdout.splitlines())
-        return {NmExecutor.source_level_name(match.group(2)) for match in matches if match and match.group(1) not in "Uvw"}
+        names = {NmExecutor.source_level_name(match.group(2)) for match in matches if match and match.group(1) not in "Uvw"}
+        return (names | {name.split(".")[0] for name in names}) - {""}
 
     @staticmethod
     def source_level_name(symbol_name: str) -> str:
