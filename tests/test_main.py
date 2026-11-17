@@ -313,3 +313,45 @@ def test_analyze_rejects_objects_without_symbols(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "No symbols in any object file" in str(result.exception)
+
+
+def test_analyze_keeps_only_symbols_linked_into_the_elf(tmp_path: Path) -> None:
+    compile_db = tmp_path / "compile_commands.json"
+    entries = [{"directory": str(tmp_path), "command": f"gcc -c {name}.c", "file": str(tmp_path / f"{name}.c"), "output": str(tmp_path / f"{name}.o")} for name in "abc"]
+    compile_db.write_text(json.dumps(entries))
+    elf_file = tmp_path / "app.elf"
+    elf_file.touch()
+    objects = [
+        ObjectDependencies(path=tmp_path / "a.o", symbols=[Symbol("b_used", SymbolLinkage.EXTERN), Symbol("c_removed", SymbolLinkage.EXTERN)]),
+        ObjectDependencies(path=tmp_path / "b.o", symbols=[Symbol("b_used", SymbolLinkage.LOCAL)]),
+        ObjectDependencies(path=tmp_path / "c.o", symbols=[Symbol("c_removed", SymbolLinkage.LOCAL)]),
+    ]
+
+    with patch("clanguru.main.parse_objects", return_value=objects), patch("clanguru.main.NmExecutor.defined_symbols", return_value={"b_used"}):
+        result = runner.invoke(app, ["analyze", "--compilation-database", str(compile_db), "--output-file", str(tmp_path / "out.html"), "--elf-file", str(elf_file)])
+
+    assert result.exit_code == 0
+    report = (tmp_path / "out.html").read_text(encoding="utf-8")
+    assert '"a.c.b.c"' in report
+    assert '"a.c.c.c"' not in report
+
+
+@pytest.mark.parametrize(
+    ("linked_symbols", "message"),
+    [
+        (set(), "found no symbols in"),
+        ({"unrelated_fn"}, "Is it from this build?"),
+    ],
+)
+def test_analyze_rejects_elf_that_keeps_no_object_symbol(tmp_path: Path, linked_symbols: set[str], message: str) -> None:
+    compile_db = tmp_path / "compile_commands.json"
+    compile_db.write_text(json.dumps([{"directory": str(tmp_path), "command": "gcc -c a.c", "file": str(tmp_path / "a.c"), "output": str(tmp_path / "a.o")}]))
+    elf_file = tmp_path / "app.elf"
+    elf_file.touch()
+    objects = [ObjectDependencies(path=tmp_path / "a.o", symbols=[Symbol("main", SymbolLinkage.LOCAL)])]
+
+    with patch("clanguru.main.parse_objects", return_value=objects), patch("clanguru.main.NmExecutor.defined_symbols", return_value=linked_symbols):
+        result = runner.invoke(app, ["analyze", "--compilation-database", str(compile_db), "--output-file", str(tmp_path / "out.html"), "--elf-file", str(elf_file)])
+
+    assert result.exit_code == 1
+    assert message in str(result.exception)

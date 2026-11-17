@@ -2,6 +2,7 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from py_app_dev.core.exceptions import UserNotificationException
@@ -20,6 +21,7 @@ from clanguru.object_analyzer import (
     ObjectsDependenciesReportGenerator,
     SymbolLinkage,
     create_report_data,
+    filter_linked_symbols,
     filter_object_data_symbols,
     parse_objects,
 )
@@ -171,17 +173,28 @@ def analyze(
     create_traceability_matrix: bool = typer.Option(False, help="Create object dependencies traceability matrix."),
     exclude_symbol_pattern: list[str] = typer.Option(None, help="Symbol patterns to exclude from analysis (glob). Can be used multiple times."),  # noqa: B008
     exclude_isolated_objects: bool = typer.Option(True, help="Exclude isolated object files with no dependencies."),
+    elf_file: Annotated[Path | None, typer.Option(exists=True, dir_okay=False, help="Linked ELF file. Only the symbols the linker kept are analyzed.")] = None,
 ) -> None:
     compilation_database_data = CompilationDatabase.from_json_file(compilation_database)
     object_files = compilation_database_data.get_output_files()
     if not object_files:
         raise UserNotificationException("No object files found in the compilation database.")
     nm_executor = NmExecutor.for_compilation_database(compilation_database_data)
+    linked_symbols = nm_executor.defined_symbols(elf_file) if elf_file else set()
+    if elf_file and not linked_symbols:
+        raise UserNotificationException(f"'{nm_executor.nm}' found no symbols in '{elf_file}'. Is it stripped, or not an ELF file?")
     logger.info(f"Parse objects files with {nm_executor.nm}")
     object_data = parse_objects(object_files, nm_executor=nm_executor)
     if not any(obj.symbols for obj in object_data):
         raise UserNotificationException(f"No symbols in any object file. '{nm_executor.nm}' is probably not the nm of the toolchain that built them.")
     print_objects_data_statistics(object_data)
+
+    if elf_file:
+        logger.info(f"Keep only the symbols linked into {elf_file}")
+        object_data = filter_linked_symbols(object_data, linked_symbols)
+        if not any(obj.symbols for obj in object_data):
+            raise UserNotificationException(f"No object symbol is linked into '{elf_file}'. Is it from this build?")
+        print_objects_data_statistics(object_data)
 
     # Apply additional user-specified exclude patterns if provided
     if exclude_symbol_pattern:
