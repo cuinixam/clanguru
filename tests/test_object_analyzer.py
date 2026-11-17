@@ -1,7 +1,9 @@
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from py_app_dev.core.exceptions import UserNotificationException
 
 from clanguru.compilation_options_manager import CompilationDatabase, CompileCommand
 from clanguru.object_analyzer import (
@@ -15,6 +17,7 @@ from clanguru.object_analyzer import (
     create_objects_graph_data_nodes,
     create_objects_report_data_tree,
     create_objects_report_data_tree_expanded,
+    filter_linked_symbols,
 )
 
 
@@ -341,3 +344,43 @@ def test_nm_executor_for_compilation_database(tmp_path: Path) -> None:
 
     assert NmExecutor.for_compilation_database(database).nm == (tmp_path / "riscv64-zephyr-elf-nm").as_posix()
     assert NmExecutor.for_compilation_database(CompilationDatabase(commands=[])).nm == "nm"
+
+
+def test_filter_linked_symbols_keeps_only_linked_names() -> None:
+    objects = [
+        ObjectDependencies(path=Path("a.o"), symbols=[Symbol("b_used", SymbolLinkage.EXTERN), Symbol("c_removed", SymbolLinkage.EXTERN)]),
+        ObjectDependencies(path=Path("c.o"), symbols=[Symbol("c_removed", SymbolLinkage.LOCAL), Symbol("c_used", SymbolLinkage.LOCAL)]),
+    ]
+
+    filtered = filter_linked_symbols(objects, {"b_used", "c_used"})
+
+    assert [obj.symbols for obj in filtered] == [[Symbol("b_used", SymbolLinkage.EXTERN)], [Symbol("c_used", SymbolLinkage.LOCAL)]]
+
+
+def test_nm_executor_defined_symbols_keeps_symbols_the_linker_made_local_or_renamed() -> None:
+    nm_output = (
+        "00000010 T global_fn\n00000020 t hidden_fn\n00000030 d local_data\n"
+        "00000040 t scale.constprop.0\n00000050 T helper.lto_priv.0\n00000060 r .1.ini\n00000070 T ghs_static..C.3A.5Csrc.5Cfoo.2Ec.\n"
+        "         U undefined_fn\n         w weak_undefined\n         v weak_undefined_object\n"
+    )
+    with patch("clanguru.object_analyzer.SubprocessExecutor") as executor:
+        executor.return_value.execute.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout=nm_output)
+        assert NmExecutor().defined_symbols(Path("app.elf")) == {
+            "global_fn",
+            "hidden_fn",
+            "local_data",
+            "scale.constprop.0",
+            "scale",
+            "helper.lto_priv.0",
+            "helper",
+            ".1.ini",
+            "ghs_static..C.3A.5Csrc.5Cfoo.2Ec.",
+            "ghs_static",
+        }
+
+
+def test_nm_executor_defined_symbols_rejects_unreadable_file() -> None:
+    with patch("clanguru.object_analyzer.SubprocessExecutor") as executor:
+        executor.return_value.execute.return_value = subprocess.CompletedProcess(args=[], returncode=1, stdout="nm: app.map: file format not recognized")
+        with pytest.raises(UserNotificationException, match="file format not recognized"):
+            NmExecutor().defined_symbols(Path("app.map"))
