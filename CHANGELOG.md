@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.24.0 (2026-11-18)
+
+### Documentation
+
+- Close clg-016 ([`8a043c7`](https://github.com/cuinixam/clanguru/commit/8a043c799bbef0bdd0b1d716dfc3c22af3793825))
+- Pull clg-016 ([`fc7a74a`](https://github.com/cuinixam/clanguru/commit/fc7a74a08a2722b74b755c31268f3d50d37c7c47))
+- Add clg-016 source links in the generated docs ([`98bc2aa`](https://github.com/cuinixam/clanguru/commit/98bc2aad7ea23c7b3a4c13c9e5cee3dccf23e8a7))
+- Describe the new backlog item format in agents.md ([`a1c0fef`](https://github.com/cuinixam/clanguru/commit/a1c0feff9fdf355629c8e1a235ac8d8babbdc52c))
+- Migrate to the new item format and drop clg-001 ([`2c3b748`](https://github.com/cuinixam/clanguru/commit/2c3b74853880b8a00055ec2268288fedacbf3152))
+
+### Features
+
+- Add source links to the generated docs (clg-016) ([`028c612`](https://github.com/cuinixam/clanguru/commit/028c6129e386fd3aae70940c56beee9157021eef))
+
 ## v0.23.2 (2026-11-06)
 
 ### Bug fixes
