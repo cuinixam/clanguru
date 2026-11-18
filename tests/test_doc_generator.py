@@ -930,3 +930,84 @@ def test_gtest_block_without_test_raises_with_line_and_hint(tmp_path: Path, code
     source.write_text(f"#define TEST(s, n) class s##_##n {{}}\n{code}", newline="\n")
     with pytest.raises(UserNotificationException, match=f"'{location}'.*directly above"):
         generate_doc_structure(CLangParser().load(source), DocsFormat.md)
+
+
+@pytest.mark.parametrize("docs_format", [DocsFormat.md, DocsFormat.myst])
+def test_source_link_ends_each_declaration_section(tmp_path: Path, docs_format: DocsFormat) -> None:
+    source = tmp_path / "src" / "foo.c"
+    source.parent.mkdir()
+    source.write_text("/** @docs Foo @enddocs */\nint foo(void) { return 0; }\n\nvoid bar(void) {}\n", newline="\n")
+    doc = generate_doc_structure(CLangParser().load(source), docs_format, source_links=True, project_root=tmp_path)
+    subsections = {subsection.title: subsection for subsection in doc.sections[0].subsections}
+    foo_content = subsections["foo"].content
+    assert foo_content[0] == TextContent("Foo")
+    assert isinstance(foo_content[-2], CodeContent)
+    assert foo_content[-1] == TextContent("[src/foo.c:2](source:src/foo.c#2)")
+    assert subsections["bar"].content[-1] == TextContent("[src/foo.c:4](source:src/foo.c#4)")
+
+
+def test_source_link_ends_each_class_section(tmp_path: Path) -> None:
+    source = tmp_path / "cls.cc"
+    source.write_text("class Foo {\n};\n", newline="\n")
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md, source_links=True, project_root=tmp_path)
+    class_section = next(section for section in doc.sections if section.title == "Classes")
+    assert class_section.subsections[0].content[-1] == TextContent("[cls.cc:1](source:cls.cc#1)")
+
+
+def test_source_link_path_is_relative_to_the_project_root_for_a_relative_source_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "foo.c").write_text("void foo(void) {}\n", newline="\n")
+    monkeypatch.chdir(tmp_path)
+    doc = generate_doc_structure(CLangParser().load(Path("src/foo.c")), DocsFormat.md, source_links=True, project_root=Path("."))
+    assert doc.sections[0].subsections[0].content[-1] == TextContent("[src/foo.c:1](source:src/foo.c#1)")
+
+
+def test_source_link_path_is_absolute_without_project_root(tmp_path: Path) -> None:
+    source = tmp_path / "foo.c"
+    source.write_text("void foo(void) {}\n", newline="\n")
+    path = source.resolve().as_posix()
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md, source_links=True)
+    assert doc.sections[0].subsections[0].content[-1] == TextContent(f"[{path}:1](source:{path}#1)")
+
+
+def test_free_doc_comment_gets_its_source_link_after_its_text(tmp_path: Path) -> None:
+    source = tmp_path / "free.c"
+    source.write_text("int pad;\n/**\n * @docs Free text\n * @enddocs\n */\nint value;\n", newline="\n")
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md, source_links=True, project_root=tmp_path)
+    assert doc.content == [TextContent("Free text"), TextContent("[free.c:2](source:free.c#2)")]
+
+
+def test_free_comment_without_doc_content_gets_no_source_link(tmp_path: Path) -> None:
+    source = tmp_path / "free.c"
+    source.write_text("/** @rst Rst only @endrst */\nint value;\n", newline="\n")
+    doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md, source_links=True, project_root=tmp_path)
+    assert doc.content == []
+
+
+def test_source_links_are_refused_for_rst(tmp_path: Path) -> None:
+    source = tmp_path / "foo.c"
+    source.write_text("void foo(void) {}\n", newline="\n")
+    with pytest.raises(UserNotificationException, match="rst"):
+        generate_doc_structure(CLangParser().load(source), DocsFormat.rst, source_links=True)
+
+
+@pytest.mark.parametrize("flavour", [MarkdownFlavour.Raw, MarkdownFlavour.Myst])
+def test_markdown_output_puts_the_source_link_after_the_code_block(tmp_path: Path, flavour: MarkdownFlavour) -> None:
+    source = tmp_path / "foo.c"
+    source.write_text("void foo(void) {}\n", newline="\n")
+    output_file = tmp_path / "out.md"
+    generate_documentation(CLangParser().load(source), MarkdownFormatter(flavour), output_file, source_links=True, project_root=tmp_path)
+    output = output_file.read_text(encoding="utf-8")
+    assert output.rindex("```") < output.index("[foo.c:1](source:foo.c#1)")
+
+
+def test_output_without_source_links_is_unchanged(tmp_path: Path) -> None:
+    source = tmp_path / "foo.c"
+    source.write_text("/** @docs Foo @enddocs */\nvoid foo(void) {}\n", newline="\n")
+    translation_unit = CLangParser().load(source)
+    default_file = tmp_path / "default.md"
+    disabled_file = tmp_path / "disabled.md"
+    generate_documentation(translation_unit, MarkdownFormatter(), default_file)
+    generate_documentation(translation_unit, MarkdownFormatter(), disabled_file, source_links=False, project_root=tmp_path)
+    assert default_file.read_text(encoding="utf-8") == disabled_file.read_text(encoding="utf-8")
+    assert "source:" not in default_file.read_text(encoding="utf-8")

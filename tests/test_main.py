@@ -313,3 +313,47 @@ def test_analyze_rejects_objects_without_symbols(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "No symbols in any object file" in str(result.exception)
+
+
+def test_docs_writes_source_links_relative_to_the_project_root(tmp_path: Path) -> None:
+    source_file = tmp_path / "src" / "foo.c"
+    source_file.parent.mkdir()
+    source_file.write_text("int foo(void) { return 0; }\n")
+    output_file = tmp_path / "out.md"
+    result = runner.invoke(
+        app,
+        [
+            "docs",
+            "--source-file",
+            source_file.as_posix(),
+            "--output-file",
+            output_file.as_posix(),
+            "--source-links",
+            "--project-root",
+            tmp_path.as_posix(),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "[src/foo.c:1](source:src/foo.c#1)" in output_file.read_text()
+
+
+def test_docs_writes_no_source_links_by_default(tmp_path: Path) -> None:
+    source_file = tmp_path / "src" / "foo.c"
+    source_file.parent.mkdir()
+    source_file.write_text("int foo(void) { return 0; }\n")
+    output_file = tmp_path / "out.md"
+    result = runner.invoke(app, ["docs", "--source-file", source_file.as_posix(), "--output-file", output_file.as_posix()])
+    assert result.exit_code == 0
+    assert "source:" not in output_file.read_text()
+
+
+def test_docs_refuses_source_links_for_rst(tmp_path: Path) -> None:
+    source_file = tmp_path / "foo.c"
+    source_file.write_text("int foo(void) { return 0; }\n")
+    output_file = tmp_path / "out.rst"
+    result = runner.invoke(
+        app,
+        ["docs", "--source-file", source_file.as_posix(), "--output-file", output_file.as_posix(), "--format", "rst", "--source-links"],
+    )
+    assert result.exit_code != 0
+    assert not output_file.exists()

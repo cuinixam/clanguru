@@ -2,6 +2,7 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from py_app_dev.core.exceptions import UserNotificationException
@@ -68,6 +69,8 @@ def docs(
         help="Output documentation format. Supported: Myst Markdown flavour (default), Markdown, RestructuredText.",
     ),
     jinja_raw_tags: bool = typer.Option(False, help="Wrap code blocks with Jinja2 raw tags to prevent template parsing errors."),
+    source_links: bool = typer.Option(False, help="Add a 'source:' link with file and line to each documented declaration. Markdown and Myst only."),
+    project_root: Annotated[Path | None, typer.Option(help="Make the source link paths relative to this folder. Without it, the paths are absolute.")] = None,
 ) -> None:
     parser = CLangParser()
     translation_unit = parser.load(source_file, CompilationOptionsManager(compilation_database))
@@ -76,7 +79,7 @@ def docs(
         formatter = RSTFormatter(jinja_raw_tags=jinja_raw_tags)
     else:
         formatter = MarkdownFormatter(MarkdownFlavour.Myst if format == DocsFormat.myst else MarkdownFlavour.Raw, jinja_raw_tags=jinja_raw_tags)
-    generate_documentation(translation_unit, formatter, output_file)
+    generate_documentation(translation_unit, formatter, output_file, source_links=source_links, project_root=project_root)
 
 
 @app.command(help="Generate mocks for C functions and variables.")
