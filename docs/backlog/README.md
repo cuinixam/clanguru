@@ -10,7 +10,6 @@
 
 ### In Progress
 
-- [CLG-016 — Source links in the generated docs](clg-016.md)
 - [CLG-002 — Filter object dependencies by the linked map or ELF file](clg-002.md)
 
 ### Blocked
