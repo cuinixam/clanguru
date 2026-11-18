@@ -16,6 +16,8 @@
 
 ### Ready
 
+- [CLG-016 — Source links in the generated docs](clg-016.md)
+
 ---
 
 ```{toctree}
