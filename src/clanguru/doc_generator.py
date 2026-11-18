@@ -427,8 +427,19 @@ def _relative_to_source(file_name: str, source_dir: Path) -> str:
         return Path(file_name).as_posix()
 
 
+def _source_link(path: str, line: int) -> TextContent:
+    return TextContent(f"[{path}:{line}](source:{path}#{line})")
+
+
 def _build_declaration_section(
-    name: str, declaration_descriptions: list[list[Token]], description_tokens: list[Token], body_code: str, body_start_line: int, tags: list[str], source_dir: Path
+    name: str,
+    declaration_descriptions: list[list[Token]],
+    description_tokens: list[Token],
+    body_code: str,
+    body_start_line: int,
+    tags: list[str],
+    source_dir: Path,
+    link_path: str | None = None,
 ) -> Section:
     section = Section(name)
     gtest = _detect_gtest(body_code)
@@ -436,6 +447,8 @@ def _build_declaration_section(
         section.content.extend(_collect_comment_contents(_relative_to_source(tokens[0].cached_file_name, source_dir), tokens, tags, gtest))
     section.content.extend(_collect_comment_contents(name, description_tokens, tags, gtest))
     section.add_content(CodeContent(code=body_code, start_line=body_start_line))
+    if link_path is not None:
+        section.add_content(_source_link(link_path, body_start_line))
     return section
 
 
@@ -445,14 +458,22 @@ def _is_declared_in(declaration: Declaration, translation_unit: TranslationUnit)
     return location_file is not None and Path(location_file.name).resolve() == translation_unit.source_file.resolve()
 
 
-def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsFormat = DocsFormat.md) -> DocStructure:
+def generate_doc_structure(
+    translation_unit: TranslationUnit, docs_format: DocsFormat = DocsFormat.md, *, source_links: bool = False, project_root: Path | None = None
+) -> DocStructure:
     """
     Generate documentation structure from a translation unit.
 
     Uses the CLangParser to extract functions and classes from the translation unit
     and creates a DocStructure object with the extracted information.
     """
+    if source_links and docs_format is DocsFormat.rst:
+        raise UserNotificationException("Source links are not supported for the rst format, use md or myst")
     tags = [docs_format.format_tag, "docs"]
+    link_path: str | None = None
+    if source_links:
+        resolved_source = translation_unit.source_file.resolve()
+        link_path = _relative_to_source(str(resolved_source), project_root.resolve()) if project_root else resolved_source.as_posix()
 
     source_dir = translation_unit.source_file.parent
     doc = DocStructure(translation_unit.source_file.name)
@@ -460,7 +481,11 @@ def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsF
     classes = [c for c in CLangParser.get_classes(translation_unit) if _is_declared_in(c, translation_unit)]
     described = {token for declaration in (*functions, *classes) for token in declaration.description_tokens}
     free_comments = [token for token in CLangParser.get_file_scope_comments(translation_unit) if token not in described]
-    doc.content.extend(_collect_comment_contents(translation_unit.source_file.name, free_comments, tags, None))
+    for token in free_comments:
+        contents = _collect_comment_contents(translation_unit.source_file.name, [token], tags, None)
+        doc.content.extend(contents)
+        if contents and link_path is not None:
+            doc.content.append(_source_link(link_path, token.cached_line))
     if functions:
         functions_section = Section("Functions")
         doc.add_section(functions_section)
@@ -475,6 +500,7 @@ def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsF
                     func.body.start_line,
                     tags,
                     source_dir,
+                    link_path,
                 )
             )
 
@@ -482,11 +508,15 @@ def generate_doc_structure(translation_unit: TranslationUnit, docs_format: DocsF
         classes_section = Section("Classes")
         doc.add_section(classes_section)
         for cls in classes:
-            classes_section.add_subsection(_build_declaration_section(cls.name, [], cls.description_tokens, cls.body.content, cls.body.start_line, tags, source_dir))
+            classes_section.add_subsection(_build_declaration_section(cls.name, [], cls.description_tokens, cls.body.content, cls.body.start_line, tags, source_dir, link_path))
 
     return doc
 
 
-def generate_documentation(translation_unit: TranslationUnit, formatter: OutputFormatter, output_file: Path) -> None:
+def generate_documentation(
+    translation_unit: TranslationUnit, formatter: OutputFormatter, output_file: Path, *, source_links: bool = False, project_root: Path | None = None
+) -> None:
     """Generate documentation from a translation unit and write it to a file using the specified formatter."""
-    output_file.write_text(formatter.format(generate_doc_structure(translation_unit, formatter.docs_format)), encoding="utf-8")
+    output_file.write_text(
+        formatter.format(generate_doc_structure(translation_unit, formatter.docs_format, source_links=source_links, project_root=project_root)), encoding="utf-8"
+    )

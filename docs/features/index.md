@@ -34,6 +34,26 @@ clanguru docs --source-file src/example.c --output-file docs/example.md --compil
 
 This approach is ideal for projects that need quick, straightforward documentation without the overhead of more complex systems.
 
+### Source Links
+
+Add `--source-links` to put a link to the source location at the end of each declaration section. A free doc comment at file scope gets its link after its doc text, pointing at the first line of the comment.
+
+```shell
+clanguru docs --source-file src/example.c --output-file docs/example.md --source-links --project-root .
+```
+
+The link has the form `[<path>:<line>](source:<path>#<line>)`, for example:
+
+```md
+[components/light_controller/src/light_controller.c:42](source:components/light_controller/src/light_controller.c#42)
+```
+
+The line is the first line of the declaration. With `--project-root` the path is relative to that folder. Without it the path is absolute. The switch is off by default, so the output does not change unless you ask for it.
+
+Source links work for Markdown and Myst Markdown only. With `--format rst` the command stops with an error.
+
+Clanguru does not resolve the link. The tool that builds your report decides where it points. If you build with MyST, add `source` to `myst_url_schemes` in `conf.py`, or MyST drops the link.
+
 ### Tagged Documentation Blocks
 
 Only tagged blocks (and `@trace` blocks, see below) reach the output. All other comment text is ignored. Wrap the text you want to emit in a tag pair:
