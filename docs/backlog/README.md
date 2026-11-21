@@ -16,6 +16,8 @@
 
 ### Ready
 
+- [CLG-017 — Render from a user template folder and pick defined or undefined symbols](clg-017.md)
+
 ---
 
 ```{toctree}
