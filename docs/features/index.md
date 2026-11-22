@@ -36,7 +36,7 @@ This approach is ideal for projects that need quick, straightforward documentati
 
 ### Source Links
 
-Add `--source-links` to put a link to the source location at the end of each declaration section. A free doc comment at file scope gets its link after its doc text, pointing at the first line of the comment.
+Add `--source-links` to put a link to the source location right above the code block of each declaration. A free doc comment at file scope gets its link after its doc text, pointing at the first line of the comment.
 
 ```shell
 clanguru docs --source-file src/example.c --output-file docs/example.md --source-links --project-root .

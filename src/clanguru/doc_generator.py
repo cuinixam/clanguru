@@ -446,9 +446,9 @@ def _build_declaration_section(
     for tokens in declaration_descriptions:
         section.content.extend(_collect_comment_contents(_relative_to_source(tokens[0].cached_file_name, source_dir), tokens, tags, gtest))
     section.content.extend(_collect_comment_contents(name, description_tokens, tags, gtest))
-    section.add_content(CodeContent(code=body_code, start_line=body_start_line))
     if link_path is not None:
         section.add_content(_source_link(link_path, body_start_line))
+    section.add_content(CodeContent(code=body_code, start_line=body_start_line))
     return section
 
 
