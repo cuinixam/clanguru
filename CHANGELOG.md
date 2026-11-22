@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.25.0 (2026-11-22)
+
+### Features
+
+- Put the source link before the code block (clg-018) ([`9de4d23`](https://github.com/cuinixam/clanguru/commit/9de4d2337b18f111dbc4f479f41e2856a0615358))
+
+### Documentation
+
+- Add clg-017 ([`5440d65`](https://github.com/cuinixam/clanguru/commit/5440d65a65235597ddc62636a5af3886b1b7e4ae))
+
 ## v0.24.0 (2026-11-18)
 
 ### Documentation
