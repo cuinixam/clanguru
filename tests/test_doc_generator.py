@@ -933,7 +933,7 @@ def test_gtest_block_without_test_raises_with_line_and_hint(tmp_path: Path, code
 
 
 @pytest.mark.parametrize("docs_format", [DocsFormat.md, DocsFormat.myst])
-def test_source_link_ends_each_declaration_section(tmp_path: Path, docs_format: DocsFormat) -> None:
+def test_source_link_precedes_the_code_block_of_each_declaration_section(tmp_path: Path, docs_format: DocsFormat) -> None:
     source = tmp_path / "src" / "foo.c"
     source.parent.mkdir()
     source.write_text("/** @docs Foo @enddocs */\nint foo(void) { return 0; }\n\nvoid bar(void) {}\n", newline="\n")
@@ -941,17 +941,17 @@ def test_source_link_ends_each_declaration_section(tmp_path: Path, docs_format: 
     subsections = {subsection.title: subsection for subsection in doc.sections[0].subsections}
     foo_content = subsections["foo"].content
     assert foo_content[0] == TextContent("Foo")
-    assert isinstance(foo_content[-2], CodeContent)
-    assert foo_content[-1] == TextContent("[src/foo.c:2](source:src/foo.c#2)")
-    assert subsections["bar"].content[-1] == TextContent("[src/foo.c:4](source:src/foo.c#4)")
+    assert foo_content[-2] == TextContent("[src/foo.c:2](source:src/foo.c#2)")
+    assert isinstance(foo_content[-1], CodeContent)
+    assert subsections["bar"].content[-2] == TextContent("[src/foo.c:4](source:src/foo.c#4)")
 
 
-def test_source_link_ends_each_class_section(tmp_path: Path) -> None:
+def test_source_link_precedes_the_code_block_of_each_class_section(tmp_path: Path) -> None:
     source = tmp_path / "cls.cc"
     source.write_text("class Foo {\n};\n", newline="\n")
     doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md, source_links=True, project_root=tmp_path)
     class_section = next(section for section in doc.sections if section.title == "Classes")
-    assert class_section.subsections[0].content[-1] == TextContent("[cls.cc:1](source:cls.cc#1)")
+    assert class_section.subsections[0].content[-2] == TextContent("[cls.cc:1](source:cls.cc#1)")
 
 
 def test_source_link_path_is_relative_to_the_project_root_for_a_relative_source_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -959,7 +959,7 @@ def test_source_link_path_is_relative_to_the_project_root_for_a_relative_source_
     (tmp_path / "src" / "foo.c").write_text("void foo(void) {}\n", newline="\n")
     monkeypatch.chdir(tmp_path)
     doc = generate_doc_structure(CLangParser().load(Path("src/foo.c")), DocsFormat.md, source_links=True, project_root=Path("."))
-    assert doc.sections[0].subsections[0].content[-1] == TextContent("[src/foo.c:1](source:src/foo.c#1)")
+    assert doc.sections[0].subsections[0].content[-2] == TextContent("[src/foo.c:1](source:src/foo.c#1)")
 
 
 def test_source_link_path_is_absolute_without_project_root(tmp_path: Path) -> None:
@@ -967,7 +967,7 @@ def test_source_link_path_is_absolute_without_project_root(tmp_path: Path) -> No
     source.write_text("void foo(void) {}\n", newline="\n")
     path = source.resolve().as_posix()
     doc = generate_doc_structure(CLangParser().load(source), DocsFormat.md, source_links=True)
-    assert doc.sections[0].subsections[0].content[-1] == TextContent(f"[{path}:1](source:{path}#1)")
+    assert doc.sections[0].subsections[0].content[-2] == TextContent(f"[{path}:1](source:{path}#1)")
 
 
 def test_free_doc_comment_gets_its_source_link_after_its_text(tmp_path: Path) -> None:
@@ -992,13 +992,13 @@ def test_source_links_are_refused_for_rst(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("flavour", [MarkdownFlavour.Raw, MarkdownFlavour.Myst])
-def test_markdown_output_puts_the_source_link_after_the_code_block(tmp_path: Path, flavour: MarkdownFlavour) -> None:
+def test_markdown_output_puts_the_source_link_before_the_code_block(tmp_path: Path, flavour: MarkdownFlavour) -> None:
     source = tmp_path / "foo.c"
     source.write_text("void foo(void) {}\n", newline="\n")
     output_file = tmp_path / "out.md"
     generate_documentation(CLangParser().load(source), MarkdownFormatter(flavour), output_file, source_links=True, project_root=tmp_path)
     output = output_file.read_text(encoding="utf-8")
-    assert output.rindex("```") < output.index("[foo.c:1](source:foo.c#1)")
+    assert output.index("[foo.c:1](source:foo.c#1)") < output.index("```")
 
 
 def test_output_without_source_links_is_unchanged(tmp_path: Path) -> None:
