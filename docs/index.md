@@ -21,6 +21,7 @@ sd_hide_title: true
 getting_started/index.md
 features/index.md
 internals/index.md
+explanation/index.md
 about/index.md
 
 ```

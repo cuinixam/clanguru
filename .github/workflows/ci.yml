@@ -24,7 +24,7 @@ jobs:
           python-version: "3.13"
           check-latest: true
       - name: Install pypeline runner
-        run: pip install pypeline-runner>=1.23
+        run: pip install pypeline-runner>=1.28
         shell: bash
       - name: Run pypeline
         run: pypeline run --step PreCommit
@@ -63,11 +63,11 @@ jobs:
         shell: bash
       - name: Install pypeline runner
         run: |
-          uv tool install "pypeline-runner>=1.23"
+          uv tool install "pypeline-runner>=1.28"
           uv tool dir --bin >> "$GITHUB_PATH"
         shell: bash
       - name: Run pypeline
-        run: pypeline run --step CreateVEnv --step PyTest --single --input python_version=${{ matrix.python-version }}
+        run: pypeline run --step CreateVEnv --step PoksInstall --step PyTest --single --input python_version=${{ matrix.python-version }}
         shell: bash
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5

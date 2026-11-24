@@ -1,6 +1,6 @@
 import fnmatch
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol, TypeAlias, runtime_checkable
@@ -239,6 +239,55 @@ def extract_symbols_data(symbols: list[FoundSymbol]) -> list[FoundVariable | Fou
     return data
 
 
+@dataclass
+class SymbolSelection:
+    found: list[FoundVariable | FoundFunction]
+    excluded: list[str]
+    missing: list[str]
+    defined: list[FoundVariable | FoundFunction] = field(default_factory=list)
+    defined_missing: list[str] = field(default_factory=list)
+
+
+def select_symbols(
+    translation_units: list[TranslationUnit], symbols: set[str], exclude_symbol_patterns: list[str], defined_symbols: frozenset[str] = frozenset()
+) -> SymbolSelection:
+    """Find the requested symbols and the defined ones, skipping those that match an exclude glob, and report which were excluded or not found."""
+    requested = symbols | defined_symbols
+    excluded = {symbol for symbol in requested if any(fnmatch.fnmatch(symbol, pattern) for pattern in exclude_symbol_patterns)}
+    selected = requested - excluded
+    found = extract_symbols_data(find_symbols(translation_units, selected))
+    found_names = {symbol.name for symbol in found}
+    return SymbolSelection(
+        found=[symbol for symbol in found if symbol.name in symbols],
+        excluded=sorted(excluded),
+        missing=sorted((selected & symbols) - found_names),
+        defined=[symbol for symbol in found if symbol.name in defined_symbols],
+        defined_missing=sorted((selected & defined_symbols) - found_names),
+    )
+
+
+def parse_sources(source_files: list[Path], compilation_database: Path | None) -> list[TranslationUnit]:
+    """
+    Parse all source files into translation units (no error collection).
+
+    If multiple sources are provided they are parsed in parallel to speed
+    up processing. Errors are inspected later by the caller.
+    """
+    compile_commands = CompilationOptionsManager(compilation_database) if compilation_database else None
+    if len(source_files) <= 1:
+        parser = CLangParser()
+        return [parser.load(source_files[0], compile_commands)] if source_files else []
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    def worker(path: Path) -> TranslationUnit:
+        p = CLangParser()
+        return p.load(path, compile_commands)
+
+    with ThreadPoolExecutor(max_workers=min(8, len(source_files))) as ex:
+        return list(ex.map(worker, source_files))
+
+
 class MockType(Enum):
     GMOCK = "gmock"
     CMOCK = "cmock"
@@ -431,22 +480,20 @@ class MocksGenerator:
 
     def generate(self) -> None:
         """Generate mock files with comprehensive error reporting."""
-        tus = self._parse_sources()
+        tus = parse_sources(self.source_files, self.compilation_database)
 
-        # Apply symbol exclusion patterns before finding symbols
-        filtered_symbols = self._filter_excluded_symbols(self.symbols)
-        excluded_symbols = list(self.symbols - filtered_symbols)
+        selection = select_symbols(tus, self.symbols, self.exclude_symbol_patterns)
 
         # Log excluded symbols
-        if excluded_symbols:
+        if selection.excluded:
             from py_app_dev.core.logging import logger
 
-            logger.info(f"Excluded {len(excluded_symbols)} symbols matching exclude patterns: {sorted(excluded_symbols)}")
+            logger.info(f"Excluded {len(selection.excluded)} symbols matching exclude patterns: {selection.excluded}")
 
-        symbols_data = extract_symbols_data(find_symbols(tus, filtered_symbols))
+        symbols_data = selection.found
 
         # Collect all issues in structured format
-        issues = self._analyze_generation_results(tus, symbols_data, excluded_symbols, filtered_symbols)
+        issues = self._analyze_generation_results(tus, selection)
 
         # Determine what can actually be rendered
         filtered_data = self._filter_renderable_symbols(symbols_data)
@@ -467,27 +514,6 @@ class MocksGenerator:
         report_content = self._create_report(issues=issues, rendered_functions=rendered_functions, rendered_variables=rendered_variables, status="success")
         self._write_log(report_content)
 
-    def _parse_sources(self) -> list[TranslationUnit]:
-        """
-        Parse all source files into translation units (no error collection).
-
-        If multiple sources are provided they are parsed in parallel to speed
-        up processing. Errors are inspected later in generate().
-        """
-        compile_commands = CompilationOptionsManager(self.compilation_database) if self.compilation_database else None
-        if len(self.source_files) <= 1:
-            parser = CLangParser()
-            return [parser.load(self.source_files[0], compile_commands)] if self.source_files else []
-
-        from concurrent.futures import ThreadPoolExecutor
-
-        def worker(path: Path) -> TranslationUnit:
-            p = CLangParser()
-            return p.load(path, compile_commands)
-
-        with ThreadPoolExecutor(max_workers=min(8, len(self.source_files))) as ex:
-            return list(ex.map(worker, self.source_files))
-
     def _select_renderer(self) -> TemplateRenderer:
         if self.mock_type == MockType.GMOCK:
             return GMockTemplateRenderer(self.filename, self.output_dir, self.env)
@@ -499,26 +525,7 @@ class MocksGenerator:
         for name, content in rendered.items():
             (self.output_dir / name).write_text(content if content.endswith("\n") else content + "\n")
 
-    def _filter_excluded_symbols(self, symbols: set[str]) -> set[str]:
-        """Filter out symbols that match any exclude pattern."""
-        if not self.exclude_symbol_patterns:
-            return symbols
-
-        filtered_symbols = set()
-        for symbol in symbols:
-            excluded = False
-            for pattern in self.exclude_symbol_patterns:
-                if fnmatch.fnmatch(symbol, pattern):
-                    excluded = True
-                    break
-            if not excluded:
-                filtered_symbols.add(symbol)
-
-        return filtered_symbols
-
-    def _analyze_generation_results(
-        self, translation_units: list[TranslationUnit], symbols_data: list[FoundVariable | FoundFunction], excluded_symbols: list[str], filtered_symbols: set[str]
-    ) -> MockGenerationIssues:
+    def _analyze_generation_results(self, translation_units: list[TranslationUnit], selection: SymbolSelection) -> MockGenerationIssues:
         """Analyze parsing and symbol extraction results to identify issues."""
         # Parse results
         parse_errors = []
@@ -526,21 +533,17 @@ class MocksGenerator:
             error = tu.parsing_error()
             parse_errors.append(FileParseResult(path=path, error=error))
 
-        # Missing symbols (only from symbols that were not excluded)
-        found_symbol_names = {symbol.name for symbol in symbols_data}
-        missing_symbols = sorted(filtered_symbols - found_symbol_names)
-
         # Unsupported functions (e.g., variadic)
         unsupported_functions = []
-        for symbol in symbols_data:
+        for symbol in selection.found:
             if isinstance(symbol, FoundFunction) and any(p.is_variadic for p in symbol.parameters):
                 unsupported_functions.append(symbol.name)
 
         return MockGenerationIssues(
             parse_errors=parse_errors,
-            missing_symbols=missing_symbols,
+            missing_symbols=selection.missing,
             unsupported_functions=unsupported_functions,
-            excluded_symbols=excluded_symbols,
+            excluded_symbols=selection.excluded,
         )
 
     def _filter_renderable_symbols(self, symbols_data: list[FoundVariable | FoundFunction]) -> list[FoundVariable | FoundFunction]:

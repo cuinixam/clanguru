@@ -1,6 +1,8 @@
+import functools
 import io
 import json
 import os
+import re
 import shlex
 import traceback
 from dataclasses import dataclass
@@ -12,6 +14,7 @@ from mashumaro.config import TO_DICT_ADD_OMIT_NONE_FLAG, BaseConfig
 from mashumaro.mixins.json import DataClassJSONMixin
 from mashumaro.types import SerializableType
 from py_app_dev.core.exceptions import UserNotificationException
+from py_app_dev.core.subprocess import SubprocessExecutor
 
 
 def split_command(command: str) -> list[str]:
@@ -169,11 +172,59 @@ class CompilationOptionsManager:
         if self.compilation_database:
             commands: list[CompileCommand] = self.compilation_database.get_compile_commands(file)
             if commands:
-                return commands[0].get_includes_and_defines()
+                return [*commands[0].get_includes_and_defines(), *system_include_args(commands[0])]
         return [] if self.no_default else _filter_preprocessor_options(self.default_options)
 
     def set_default_options(self, options: list[str]) -> None:
         self.default_options = options
+
+
+SEARCH_LIST_START = "#include <...> search starts here:"
+SEARCH_LIST_END = "End of search list."
+FRAMEWORK_NOTE = " (framework directory)"
+C_SUFFIXES = (".c", ".h")
+#: Only a gcc or clang driver is run: a compile database can name any program.
+COMPILER_NAME = re.compile(r"(.+-)?(gcc|g\+\+|cc|c\+\+|clang|clang\+\+)(-[0-9.]+)?")
+
+
+def parse_system_include_args(compiler_output: str) -> list[str]:
+    """
+    The libclang arguments for the folders of a gcc or clang `-E -v` search list.
+
+    All folders are kept, the compiler's builtin headers too: libclang from pip ships none.
+    Folders are normalised, since relocated toolchains print them with `..` parts.
+    """
+    lines = [line.strip() for line in compiler_output.splitlines()]
+    if SEARCH_LIST_START not in lines or SEARCH_LIST_END not in lines:
+        return []
+    start = lines.index(SEARCH_LIST_START) + 1
+    args: list[str] = []
+    for line in lines[start : lines.index(SEARCH_LIST_END, start)]:
+        flag = "-iframework" if line.endswith(FRAMEWORK_NOTE) else "-isystem"
+        args.extend([flag, os.path.normpath(line.removesuffix(FRAMEWORK_NOTE))])
+    return args
+
+
+@functools.cache
+def compiler_system_include_args(compiler: Path, language: str) -> tuple[str, ...]:
+    """Ask the compiler once per run: a compile command never names its own system include folders, and libclang does not know them."""
+    command: list[str | Path] = [compiler, "-E", "-v", "-x", language, os.devnull]
+    try:
+        # LC_ALL=C: gcc translates the search-list markers.
+        result = SubprocessExecutor(command, env={**os.environ, "LC_ALL": "C"}, capture_output=True, print_output=False).execute(handle_errors=False)
+    except (UserNotificationException, OSError):
+        return ()
+    return tuple(parse_system_include_args(result.stdout)) if result else ()
+
+
+def system_include_args(command: CompileCommand) -> list[str]:
+    compiler = command.get_compiler()
+    if not compiler or not COMPILER_NAME.fullmatch(compiler.stem):
+        return []
+    if len(compiler.parts) > 1 and not compiler.is_absolute():
+        compiler = command.directory / compiler
+    language = "c" if command.file.suffix in C_SUFFIXES else "c++"
+    return list(compiler_system_include_args(compiler, language))
 
 
 #: Options that decide what the preprocessor sees: include paths, macros and forced includes.

@@ -306,6 +306,53 @@ clanguru mock --source-file src/api.h \
   --config-file mock_config.yaml
 ```
 
+## Python Binding
+
+Test C code from Python through a shared library, without declaring C signatures by hand.
+
+- **Binding**: the generated Python module that declares, with `ctypes`, the functions and variables a piece of C code defines, so Python code can call them in a shared library.
+- **Python mock**: a function the C code calls but does not define, answered by a Python callable that the test sets.
+
+```shell
+clanguru bind --source-file src/sensor.c \
+  --partial-object-file build/sensor_partial.o \
+  --compilation-database build/compile_commands.json \
+  --output-dir build/sensor \
+  --filename sensor_binding \
+  --library-name sensor_pytest
+```
+
+`bind` writes three files into the output directory:
+
+- `sensor_binding.py`: the binding. It declares the defined functions and variables, the structs and enums they use, one Python mock per undefined function, and each undefined variable.
+- `sensor_binding_mocks.c`: one trampoline per undefined function and a zero-initialised definition of each undefined variable. Build it into the shared library together with the code; without it the library does not link.
+- `sensor_binding.log`: the symbols `bind` could not support, the excluded ones and the missing ones.
+
+Build the shared library as `sensor_pytest.so` (`.dylib` on macOS, `.dll` on Windows, no `lib` prefix) in the same folder and use it from a test:
+
+```python
+from unittest.mock import Mock
+
+import sensor_binding
+
+lib = sensor_binding.load()  # or load(path) for a library somewhere else
+lib.sensor_offset.value = 2  # variables are ctypes objects
+lib.mocks.read_sensor = Mock(return_value=40)
+assert lib.measure(3) == 42
+lib.mocks.read_sensor.assert_called_once_with(3)
+assert lib.mocks.unexpected_calls == []
+```
+
+A call to an undefined function with no Python mock set returns a zero value and is recorded: `lib.mocks.unexpected_calls` lists the function name once per such call. A Python mock of a function that returns a pointer returns an address (an `int`) or `None`, because a `ctypes` callback can only return simple types. Setting a Python mock to `None` removes it. The library is loaded once per process, so every `load()` removes the Python mocks and clears `unexpected_calls`: call it at the start of each test.
+
+An array parameter is passed as a pointer, as in C: give the binding a `ctypes` array, and index the pointer a Python mock receives. Arrays of arrays as parameters and pointers to arrays are not supported. A `const` variable, defined or undefined, can be read but never written: it lives in read-only memory, and writing it ends the process. An undefined `const` variable is always zero. An anonymous struct or enum that is not the target of a `typedef` has no name to bind; a symbol that uses one is listed in the log.
+
+**Which symbols.** `bind` takes the same options as `mock` and chooses symbols with the same code: every symbol of the partial-link object whose declaration clanguru finds in the source files, minus the `--exclude-symbol-pattern` matches. Undefined symbols get Python mocks, defined symbols go into the binding.
+
+**Strict mode** (`--strict`, the default) fails only when an undefined symbol has no declaration, because the library cannot link then. Unsupported types never fail: the symbol goes to the log. A defined symbol without a declaration is left out of the binding and listed in the log.
+
+**Supported types.** Scalars, pointers, structs and enums. Not supported yet: function pointers, unions, bit fields, variadic functions, and functions that return a struct by value. A function with an unsupported type gets no Python mock; write a C fake for it and link it into the library, or the link fails and names it.
+
 ## Object File Analysis
 
 Analyze object file dependencies and generate comprehensive reports for understanding your project's symbol usage and dependencies.

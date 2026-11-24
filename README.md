@@ -49,11 +49,11 @@ pipx install clanguru
 
 ## Usage
 
-Clanguru provides four main commands for C/C++ code analysis and utility operations:
+Clanguru provides five main commands for C/C++ code analysis and utility operations:
 
 - **Documentation**: Generate (minimal) documentation for C/C++ sources functions and classes.
   It supports multiple output formats including Myst Markdown, standard Markdown, and RestructuredText.
-- **Testing**: Create mock objects for unit testing C functions
+- **Testing**: Create mock objects for unit testing C functions, or a Python binding with Python mocks to test C code from Python
 - **Analysis**: Understand object file dependencies and symbol usage. It can generate HTML and Excel reports.
 
 Check the help message for more details:
@@ -73,6 +73,8 @@ clanguru --help
 ╭─ Commands ───────────────────────────────────────────────────────────╮
 │ docs      Generate documentation for C/C++ source code.              │
 │ mock      Generate mocks for C functions and variables.              │
+│ bind      Generate a Python ctypes binding and Python mocks for C    │
+│           code.                                                      │
 │ parse     Parse C source code and print the translation unit.        │
 │ analyze   Analyze object files dependencies.                         │
 ╰──────────────────────────────────────────────────────────────────────╯

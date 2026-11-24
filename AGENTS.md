@@ -2,10 +2,11 @@
 
 ## Project Overview
 
-Clanguru is a C/C++ analysis toolkit providing four CLI commands:
+Clanguru is a C/C++ analysis toolkit providing five CLI commands:
 
 - **`docs`** — Generate documentation from C/C++ sources (Myst Markdown, Markdown, RestructuredText)
 - **`mock`** — Generate mock objects for unit testing (GMock, CMock)
+- **`bind`** — Generate a Python `ctypes` binding and Python mocks for C code
 - **`parse`** — Parse C source code and print the translation unit (AST)
 - **`analyze`** — Analyze object file dependencies and generate reports (HTML, Excel)
 
@@ -15,10 +16,11 @@ Key modules in `src/clanguru/`:
 
 | Module | Purpose |
 |--------|---------|
-| `main.py` | CLI entry point (Typer) — all four commands defined here |
+| `main.py` | CLI entry point (Typer) — all five commands defined here |
 | `cparser.py` | libclang-based C/C++ parser, produces `TranslationUnit` with chained tokens/nodes |
 | `doc_generator.py` | Documentation generation with intermediate `DocStructure` format and pluggable formatters |
-| `mock_generator.py` | Mock generation engine with Jinja2 templates (`templates/mock/gmock/`) |
+| `mock_generator.py` | Mock generation engine with Jinja2 templates (`templates/mock/gmock/`); the symbol selection shared with `bind` |
+| `binding_generator.py` | Python binding and Python mocks for `bind`, with Jinja2 templates (`templates/bind/`) |
 | `object_analyzer.py` | Object file dependency analysis using `nm`, HTML/Excel report generation |
 | `compilation_options_manager.py` | Compilation database (`compile_commands.json`) parsing and flag management |
 

@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from collections.abc import Generator
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from clanguru.compilation_options_manager import (
     CompilationOptionsManager,
     CompileCommand,
     filter_compilation_database,
+    parse_system_include_args,
 )
 
 
@@ -201,10 +203,15 @@ def test_compilation_options_manager_get_includes_and_defines_with_database(temp
     manager = CompilationOptionsManager(temp_compilation_database)
 
     test1_path = Path(temp_compilation_database.parent) / "test1.c"
-    assert manager.get_includes_and_defines(test1_path) == ["-I/usr/include", "-DDEBUG"]
+    test1_options = manager.get_includes_and_defines(test1_path)
+    assert test1_options[:2] == ["-I/usr/include", "-DDEBUG"]
+    assert len(test1_options) % 2 == 0
+    assert all(option in ("-isystem", "-iframework") for option in test1_options[2::2])
 
     test2_path = Path(temp_compilation_database.parent) / "test2.c"
-    assert manager.get_includes_and_defines(test2_path) == []
+    test2_options = manager.get_includes_and_defines(test2_path)
+    assert len(test2_options) % 2 == 0
+    assert all(option in ("-isystem", "-iframework") for option in test2_options[::2])
 
 
 def test_compilation_options_manager_get_includes_and_defines_without_database() -> None:
@@ -308,3 +315,154 @@ def test_to_json(tmp_path: Path) -> None:
 
     expected_output = json.dumps(db_content, indent=2)
     assert json.loads(json_output) == json.loads(expected_output)
+
+
+GCC_LINUX_OUTPUT = """Using built-in specs.
+COLLECT_GCC=gcc
+Target: x86_64-linux-gnu
+gcc version 13.2.0 (Ubuntu 13.2.0-23ubuntu4)
+ignoring nonexistent directory "/usr/local/include/x86_64-linux-gnu"
+ignoring nonexistent directory "/usr/lib/gcc/x86_64-linux-gnu/13/include-fixed"
+#include "..." search starts here:
+#include <...> search starts here:
+ /usr/lib/gcc/x86_64-linux-gnu/13/include
+ /usr/local/include
+ /usr/include/x86_64-linux-gnu
+ /usr/include
+End of search list.
+COMPILER_PATH=/usr/libexec/gcc/x86_64-linux-gnu/13/
+"""
+
+APPLE_CLANG_OUTPUT = """Apple clang version 17.0.0 (clang-1700.0.13.5)
+Target: arm64-apple-darwin25.0.0
+Thread model: posix
+clang -cc1 version 17.0.0 based upon LLVM 17.0.0 default target arm64-apple-darwin25.0.0
+ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Library/Developer/CommandLineTools/usr/lib/clang/17/include
+ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include
+ /Library/Developer/CommandLineTools/usr/include
+ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+"""
+
+
+@pytest.mark.parametrize(
+    "compiler_output, expected",
+    [
+        pytest.param(
+            GCC_LINUX_OUTPUT,
+            [
+                "-isystem",
+                os.path.normpath("/usr/lib/gcc/x86_64-linux-gnu/13/include"),
+                "-isystem",
+                os.path.normpath("/usr/local/include"),
+                "-isystem",
+                os.path.normpath("/usr/include/x86_64-linux-gnu"),
+                "-isystem",
+                os.path.normpath("/usr/include"),
+            ],
+            id="linux_gcc",
+        ),
+        pytest.param(
+            APPLE_CLANG_OUTPUT,
+            [
+                "-isystem",
+                os.path.normpath("/Library/Developer/CommandLineTools/usr/lib/clang/17/include"),
+                "-isystem",
+                os.path.normpath("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include"),
+                "-isystem",
+                os.path.normpath("/Library/Developer/CommandLineTools/usr/include"),
+                "-iframework",
+                os.path.normpath("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"),
+            ],
+            id="apple_clang",
+        ),
+        pytest.param("gcc: error: unrecognized command-line option\n", [], id="no_markers"),
+    ],
+)
+def test_parse_system_include_args(compiler_output: str, expected: list[str]) -> None:
+    assert parse_system_include_args(compiler_output) == expected
+
+
+def test_get_includes_and_defines_adds_nothing_when_compiler_cannot_run(tmp_path: Path) -> None:
+    db_file = tmp_path / "compile_commands.json"
+    db_file.write_text(json.dumps([{"directory": tmp_path.as_posix(), "file": "a.c", "command": "does-not-exist-cc -Iinc -DX=1 -c a.c"}]))
+    manager = CompilationOptionsManager(db_file)
+    assert manager.get_includes_and_defines(tmp_path / "a.c") == ["-Iinc", "-DX=1"]
+
+
+FAKE_COMPILER_SH = """#!/bin/sh
+touch "$(dirname "$0")/ran.marker"
+while [ "$1" != "-x" ]; do shift; done
+if [ "$LC_ALL" = "C" ]; then
+    echo "#include <...> search starts here:" >&2
+else
+    echo "la ricerca di #include <...> inizia qui:" >&2
+fi
+echo " /opt/fake/lib/gcc/x/1/include" >&2
+echo " /opt/fake/bin/../lib/gcc/x/1/../../../../x/include" >&2
+echo " /opt/fake/bin/../lib/gcc/x/1/include-fixed" >&2
+echo " /opt/fake/include-$2" >&2
+if [ "$LC_ALL" = "C" ]; then
+    echo "End of search list." >&2
+else
+    echo "Fine dell'elenco di ricerca." >&2
+fi
+"""
+
+FAKE_COMPILER_CMD = """@echo off
+type nul > "%~dp0ran.marker"
+if "%LC_ALL%"=="C" (
+    1>&2 echo #include ^<...^> search starts here:
+) else (
+    1>&2 echo la ricerca di #include ^<...^> inizia qui:
+)
+1>&2 echo  /opt/fake/lib/gcc/x/1/include
+1>&2 echo  /opt/fake/bin/../lib/gcc/x/1/../../../../x/include
+1>&2 echo  /opt/fake/bin/../lib/gcc/x/1/include-fixed
+1>&2 echo  /opt/fake/include-%4
+if "%LC_ALL%"=="C" (
+    1>&2 echo End of search list.
+) else (
+    1>&2 echo Fine dell'elenco di ricerca.
+)
+"""
+
+SCRIPT_SUFFIX = ".cmd" if sys.platform == "win32" else ""
+
+
+def write_fake_compiler(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(FAKE_COMPILER_CMD if sys.platform == "win32" else FAKE_COMPILER_SH)
+    path.chmod(0o755)
+
+
+def write_database(tmp_path: Path, compiler: str, file_name: str) -> CompilationOptionsManager:
+    db_file = tmp_path / "compile_commands.json"
+    db_file.write_text(json.dumps([{"directory": tmp_path.as_posix(), "file": file_name, "arguments": [compiler, "-Iinc", "-c", file_name]}]))
+    return CompilationOptionsManager(db_file)
+
+
+@pytest.mark.parametrize("file_name, language", [("a.c", "c"), ("a.hpp", "c++")])
+def test_compiler_search_list_reaches_the_options(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, file_name: str, language: str) -> None:
+    monkeypatch.setenv("LC_ALL", "it_IT.UTF-8")
+    write_fake_compiler(tmp_path / "tools" / f"gcc{SCRIPT_SUFFIX}")
+    manager = write_database(tmp_path, f"tools/gcc{SCRIPT_SUFFIX}", file_name)
+    folders = [
+        "/opt/fake/lib/gcc/x/1/include",
+        "/opt/fake/bin/../lib/gcc/x/1/../../../../x/include",
+        "/opt/fake/bin/../lib/gcc/x/1/include-fixed",
+        f"/opt/fake/include-{language}",
+    ]
+    expected = ["-Iinc"] + [arg for folder in folders for arg in ("-isystem", os.path.normpath(folder))]
+    assert manager.get_includes_and_defines(tmp_path / file_name) == expected
+
+
+def test_program_not_named_like_a_compiler_is_never_run(tmp_path: Path) -> None:
+    script = tmp_path / f"build{SCRIPT_SUFFIX}"
+    write_fake_compiler(script)
+    manager = write_database(tmp_path, script.as_posix(), "a.c")
+    assert manager.get_includes_and_defines(tmp_path / "a.c") == ["-Iinc"]
+    assert not (tmp_path / "ran.marker").exists()

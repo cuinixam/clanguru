@@ -11,6 +11,7 @@ from clanguru.mock_generator import (
     MockType,
     extract_symbols_data,
     find_symbols,
+    select_symbols,
 )
 from tests.conftest import assert_element_of_type, assert_elements_of_type
 
@@ -281,3 +282,13 @@ def test_symbols_deduplication_across_multiple_translation_units(tmp_path: Path)
 
     # Verify variable properties
     assert shared_var.type == "int"
+
+
+def test_select_symbols_excludes_and_reports_missing(tmp_path: Path) -> None:
+    translation_unit = CLangParser().load(write_source(tmp_path))
+
+    selection = select_symbols([translation_unit], {"foo", "global_counter", "_global", "unknown"}, ["_*"])
+
+    assert sorted(symbol.name for symbol in selection.found) == ["foo", "global_counter"]
+    assert selection.excluded == ["_global"]
+    assert selection.missing == ["unknown"]
