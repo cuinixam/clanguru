@@ -1,0 +1,15 @@
+{
+    "buckets": [
+        {
+            "name": "poks-bucket",
+            "url": "https://github.com/cuinixam/poks-bucket.git"
+        }
+    ],
+    "apps": [
+        {
+            "name": "clang",
+            "version": "20.1.8-1",
+            "bucket": "poks-bucket"
+        }
+    ]
+}

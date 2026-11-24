@@ -14,6 +14,8 @@ Or using pip:
 pip install clanguru
 ```
 
+With a compilation database, clanguru runs the gcc or clang driver that a compile command names (`<compiler> -E -v`) to read its system include folders, so the parser finds system headers such as `stdint.h`; the compiler must be installed where clanguru runs. Only a program whose file name looks like a gcc or clang driver is run, wherever it lives, so use clanguru only with a compile database you trust. Without a database, or when that compiler cannot be run, system headers may not be found: their types read as `int`, `bind` leaves out the symbols whose structs use them, and `mock` fails in strict mode (the default) and otherwise writes `int` for them.
+
 ## Quick Start
 
 To see available commands and options, use:

@@ -9,6 +9,7 @@ from py_app_dev.core.exceptions import UserNotificationException
 from py_app_dev.core.logging import logger, setup_logger, time_it
 
 from clanguru import __version__
+from clanguru.binding_generator import BindingGenerator
 from clanguru.compilation_options_manager import CompilationDatabase, CompilationOptionsManager
 from clanguru.cparser import CLangParser
 from clanguru.doc_generator import DocsFormat, MarkdownFlavour, MarkdownFormatter, OutputFormatter, RSTFormatter, generate_documentation
@@ -130,6 +131,32 @@ def mock(
         raise UserNotificationException("No symbols provided. Either specify --symbol or provide --partial-object-file.")
 
     MocksGenerator(source_file, symbols, output_dir, filename, compilation_database, config).generate()
+
+
+@app.command(help="Generate a Python ctypes binding and Python mocks for C code.")
+@time_it("bind")
+def bind(
+    source_file: Annotated[list[Path], typer.Option(help="Input source file(s). Can be used multiple times.")],
+    partial_object_file: Annotated[Path, typer.Option(help="Partial link object file. Its defined symbols are bound, its undefined functions get Python mocks.")],
+    output_dir: Annotated[Path, typer.Option(help="Output directory.")],
+    filename: Annotated[str, typer.Option(help="Filename for the generated binding files.")],
+    library_name: Annotated[str, typer.Option(help="Name of the shared library the binding loads, without prefix and extension.")],
+    compilation_database: Annotated[Path | None, typer.Option(help="Compilation database file required if the source file includes external headers.")] = None,
+    exclude_symbol_pattern: Annotated[list[str] | None, typer.Option(help="Symbol patterns to exclude (glob patterns). Can be used multiple times.")] = None,
+    strict: Annotated[bool, typer.Option(help="Fail if an undefined symbol has no declaration.")] = True,
+) -> None:
+    object_data = NmExecutor().run(partial_object_file)
+    BindingGenerator(
+        source_file,
+        object_data.required_symbols,
+        object_data.provided_symbols,
+        output_dir,
+        filename,
+        library_name,
+        compilation_database,
+        exclude_symbol_pattern or [],
+        strict,
+    ).generate()
 
 
 @app.command(help="Parse C source code and print the translation unit.")

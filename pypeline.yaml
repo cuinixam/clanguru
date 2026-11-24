@@ -10,6 +10,8 @@ pipeline:
     config:
       package_manager: uv>=0
       python_version: "3.13"
+  - step: PoksInstall
+    module: pypeline.steps.poks_install
   - step: GenerateEnvSetupScript
     module: pypeline.steps.env_setup_script
   - step: PreCommit
