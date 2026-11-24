@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.26.0 (2026-11-24)
+
+### Features
+
+- Generate python bindings and mocks; the parser asks the compiler for system headers (clg-019) ([`d24c03d`](https://github.com/cuinixam/clanguru/commit/d24c03d5dee8fb0672876b56e243e1560b239ffa))
+
+### Documentation
+
+- Add clg-019 to generate python bindings and mocks for c code ([`81ff7de`](https://github.com/cuinixam/clanguru/commit/81ff7de1c1a06bfe91c2a5594f41e3052efec351))
+
 ## v0.25.0 (2026-11-22)
 
 ### Features
